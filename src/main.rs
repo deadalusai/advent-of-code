@@ -23,7 +23,7 @@ fn is_str_nice_old_rules(s: &str) -> bool {
     
     let mut last = None;
     let mut vowel_count = 0;
-    let mut has_double = false;
+    let mut double_count = 0;
     
     for c in s.chars() {
         
@@ -43,7 +43,7 @@ fn is_str_nice_old_rules(s: &str) -> bool {
                 (o, c) => {
                     if o == c {
                         //Found a nice double 
-                        has_double = true;
+                        double_count += 1;
                     }
                 }
             };
@@ -52,7 +52,7 @@ fn is_str_nice_old_rules(s: &str) -> bool {
         last = Some(c);
     }
         
-    has_double && vowel_count >= 3
+    double_count > 0 && vowel_count >= 3
 }
 
 //
@@ -81,12 +81,15 @@ fn is_str_nice_new_rules(s: &str) -> bool {
             
             //Check for the first place this pair occured
             match double_indices.entry(pair) {
-                Occupied(e) => {
+                Occupied(mut e) => {
                     //Was it more than one position away from this character?
                     let last_index = *e.get();
                     if index - last_index > 1 {
                         //Count it as a non-overlapping double
                         non_overlapping_double_count += 1;
+                        
+                        //Update the index so we can count the next double 
+                        e.insert(index);
                     }
                 },
                 Vacant(e) => {
