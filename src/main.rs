@@ -77,7 +77,7 @@ impl FromStr for Command {
             };
             
         //Expect range
-        let from = match parts.next().map(|s| s.parse::<Coord>()) { 
+        let from = match parts.next().map(|s| s.parse()) { 
             Some(Ok(r))  => r, 
             Some(Err(e)) => return Err(e),
             _            => return Err("Expected range start")
@@ -90,7 +90,7 @@ impl FromStr for Command {
         };
             
         //Expect range
-        let to = match parts.next().map(|s| s.parse::<Coord>()) { 
+        let to = match parts.next().map(|s| s.parse()) { 
             Some(Ok(r))  => r,
             Some(Err(e)) => return Err(e),
             _            => return Err("Expected range to")
@@ -108,22 +108,24 @@ impl FromStr for Command {
     }
 }
 
+type Light = u32;
+
 struct LightGrid {
     stride: usize,
-    lights: Vec<bool>
+    lights: Vec<Light>
 }
 
 impl LightGrid {
     fn new(w: usize, h: usize) -> LightGrid {
-        LightGrid { stride: w, lights: vec![false; w * h] }
+        LightGrid { stride: w, lights: vec![0; w * h] }
     }
     
-    fn get_light_mut(&mut self, coord: Coord) -> &mut bool {
+    fn get_light_mut(&mut self, coord: Coord) -> &mut Light {
         let index = coord.to_index(self.stride);
         &mut self.lights[index]
     }
     
-    fn get_all(&self) -> &[bool] {
+    fn get_all(&self) -> &[Light] {
         &self.lights[..]
     }
 }
@@ -155,38 +157,19 @@ fn main() {
             for x in x1..x2 + 1 {
                 let light = lights.get_light_mut(Coord(x, y));
                 match command.action {
-                    Action::TurnOn => *light = true,
-                    Action::TurnOff => *light = false,
-                    Action::Toggle => *light = !*light
+                    Action::TurnOn => *light += 1,
+                    Action::Toggle => *light += 2,
+                    Action::TurnOff => {
+                        if *light > 0 {
+                            *light -= 1;
+                        }
+                    }
                 };
-            } 
+            }
         }
     }
     
-    let lights_on_count =
-        lights.get_all()
-              .iter()
-              .filter(|light| **light) // How do we avoid this double de-reference?
-              .count();
+    let sum_of_all_light: u32 = lights.get_all().iter().map(|&l| l as u32).sum();
               
-    println!("There are {} lights on", lights_on_count);
-    
-    /*
-    let mut buf = String::new();
-    
-    for row in 0..10 {
-        
-        buf.clear();
-        
-        for &light in lights.get_range(Coord(0, row), Coord(9, row)) {
-            if light {
-                buf.push('x');
-            }
-            else {
-                buf.push('.');
-            }
-        }
-        
-        println!("{}", &buf);
-    }*/
+    println!("Total brightness: {}", sum_of_all_light);
 }
