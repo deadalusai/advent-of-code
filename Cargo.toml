@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Benjamin Fox <benjaminf@intergen.co.nz>"]
 
 [dependencies]
-
+combine = "1.2.0"

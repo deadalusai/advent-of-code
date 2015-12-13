@@ -1,60 +1,28 @@
 #![feature(io, iter_arith)]
 #![allow(dead_code, unused_features)]
 
+extern crate combine;
+
 use std::env::args;
 use std::fs::File;
 use std::io::{ BufRead, BufReader };
-use std::str::FromStr;
-use std::rc::Rc;
-use std::ascii::AsciiExt;
+
+use combine::{ spaces, many1, digit, lower, string, choice, try, Parser, ParserExt, ParseError };
+
+type PResult<'a, T> = Result<(T, &'a str), ParseError<&'a str>>;
 
 fn open_file() -> File {
     let filename = args().skip(1).next().expect("usage: day7 {input filename}");
     File::open(filename).expect("Error opening input")
 }
 
-macro_rules! consume {
-    ($src:expr, $or_err:expr) => {{
-        match $src.next() {
-            Some(x) => x,
-            None    => return Err($or_err)
-        }
-    }}
-}
-
 type Signal = u16;
+type Label = String;
 
 #[derive(Debug)]
-struct Label(String);
-
-impl FromStr for Label {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.chars().all(|c| c.is_alphabetic() && c.is_lowercase()) {
-            Ok(Label(s.into()))
-        }
-        else {
-            Err("Invalid label")
-        }
-    }
-}
-
-#[derive(Debug)]
-enum Gate2 {
-    AND, OR, LSHIFT, RSHIFT
-}
-
-impl FromStr for Gate2 {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "AND"    => Ok(Gate2::RSHIFT),
-            "OR"     => Ok(Gate2::LSHIFT),
-            "LSHIFT" => Ok(Gate2::OR),
-            "RSHIFT" => Ok(Gate2::AND),
-            _        => Err("Unrecognized Gate2")
-        }
-    }
+enum Source {
+    Wire(Label),
+    Const(Signal)
 }
 
 #[derive(Debug)]
@@ -63,63 +31,88 @@ enum Gate1 {
 }
 
 #[derive(Debug)]
-enum Desc {
-    Input(Signal),
-    Gate2(Gate2, Label, Label),
-    Gate1(Gate1, Label)
+enum Gate2 {
+    AND, OR, LSHIFT, RSHIFT
 }
 
-fn is_numeric(s: &str) -> bool {
-    s.chars().all(|c| c.is_numeric())
-}
-
-impl FromStr for Desc {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(" ");
-        let r = match consume!(parts, "Expected label or instruction") {
-            "NOT" => {
-                let label = try!(consume!(parts, "Expected label").parse());
-                
-                Desc::Gate1(Gate1::NOT, label)
-            },
-            num_str if is_numeric(num_str) => {
-                let input = try!(num_str.parse().map_err(|_| "Invalid input"));
-                
-                Desc::Input(input)
-            }
-            left_label => {
-                let left_label  = try!(left_label.parse());
-                let gate        = try!(consume!(parts, "Expected gate").parse());
-                
-                let label = consume!(parts, "Expected label");
-                println!("right_label `{}`", label);
-                let right_label = try!(label.parse());
-                
-                Desc::Gate2(gate, left_label, right_label)
-            }
-        };
-        Ok(r)
-    }
+#[derive(Debug)]
+enum Expr {
+    Input(Source),
+    Gate1(Gate1, Source),
+    Gate2(Gate2, Source, Source)
 }
 
 #[derive(Debug)]
 struct Instruction {
-    target: Label,
-    desc: Desc
+    expr: Expr,
+    target: Label
 }
 
-impl FromStr for Instruction {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split("->").map(|s| s.trim());
-        let desc = try!(consume!(parts, "Expected description").parse());
-        let target = try!(consume!(parts, "Expected label").parse());
-        if parts.next().is_some() {
-            return Err("Unexpected input");
-        }
-        Ok(Instruction { desc: desc, target: target })
-    }
+fn parse_instruction(s: &str) -> PResult<Instruction> {
+    
+    // A wire "label" is a sequence of lowercase letters
+    let p_wire_label = || many1(lower()).message("Label");
+
+    // A raw signal is an integer                         
+    let p_signal = || many1(digit()).map(|val: String| val.parse::<Signal>().unwrap()).message("Raw Signal");
+    
+    let p_source = || {
+        let signal = p_signal().map(|l| Source::Const(l));
+        let wire = p_wire_label().map(|s| Source::Wire(s));
+        spaces().with(
+            signal.or(wire)
+        )
+    };
+        
+    let p_gate_2 = || {
+        let choice =
+            choice([
+                string("AND"),
+                string("OR"),
+                string("LSHIFT"),
+                string("RSHIFT"),
+            ])
+            .map(|label| match label {
+                "AND"    => Gate2::AND,
+                "OR"     => Gate2::OR,
+                "LSHIFT" => Gate2::LSHIFT,
+                "RSHIFT" => Gate2::RSHIFT,
+                _        => panic!("p_gate_2")
+            });
+            
+        spaces().with(
+            choice
+        )
+    };
+        
+    let p_gate_1 = || {
+        let choice = string("NOT").map(|_| Gate1::NOT);
+        
+        spaces().with(
+            choice
+        )
+    };
+        
+
+    let p_expr = || {
+        let gate2 = p_source().and(p_gate_2()).and(p_source()).map(|((source1, gate), source2)| Expr::Gate2(gate, source1, source2)).message("Two-input Gate");
+        let gate1 = p_gate_1().and(p_source())                .map(|(gate, source)|             Expr::Gate1(gate, source))          .message("One-input Gate");
+        let input = p_source()                                .map(|source|                     Expr::Input(source));
+        
+        spaces().with(
+            try(gate2).or(try(gate1)).or(input)
+        )
+    };
+    
+    let p_inst = || {
+        let arrow = spaces().with(string("->"));
+        let target = spaces().with(p_wire_label());
+        
+        p_expr().skip(arrow).and(target)
+            .map(|(expr, target)| Instruction { expr: expr, target: target })
+    };
+    
+    p_inst().parse(s)
 }
 
 fn read_instructions(file: File) -> Vec<Instruction> {
@@ -127,8 +120,8 @@ fn read_instructions(file: File) -> Vec<Instruction> {
         .lines()
         .map(|line| line.expect("Error reading file"))
         .map(|line| {
-            match line.parse() {
-                Ok(line) => line,
+            match parse_instruction(&line) {
+                Ok((val, remainder)) => val,
                 Err(e) => panic!("Error parsing line `{}`: {}", line, e)
             }
         })
