@@ -101,6 +101,23 @@ fn parse_quoted_string(source: String) -> Result<StringInfo, String> {
     Ok(StringInfo { source: source, parsed: parsed })
 }
 
+fn encode_string(s: &str) -> String {
+    let mut buf = String::new();
+    
+    buf.push('"');
+    
+    for char in s.chars() {
+        match char {
+            '\"'         => buf.push_str("\\\""),
+            '\\'         => buf.push_str("\\\\"),
+            c => buf.push(c),
+        }
+    }
+    
+    buf.push('"');
+    buf
+}
+
 fn main() {
     // Disregarding the whitespace in the file, what is the number of characters of code 
     // for string literals minus the number of characters in memory for the values of the
@@ -108,15 +125,20 @@ fn main() {
     
     let lines = read_quoted_strings(open_file());
     let mut weird_sum = 0;
+    let mut other_weird_sum = 0;
     
     for line in lines {
         let source_chars = line.source.chars().count();
         let parsed_chars = line.parsed.chars().count();
         
-        println!("{} ({}) -> {} ({})", line.source, source_chars, line.parsed, parsed_chars);
-        
         weird_sum += source_chars - parsed_chars;
+        
+        let double_encoded = encode_string(&line.source);
+        let double_encoded_chars = double_encoded.chars().count();
+        
+        other_weird_sum += double_encoded_chars - source_chars;
     }
     
     println!("Weird sum: {}", weird_sum);
+    println!("Other weird sum: {}", other_weird_sum);
 }
