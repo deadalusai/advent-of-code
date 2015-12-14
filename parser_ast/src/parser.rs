@@ -4,7 +4,7 @@ use combine::{ spaces, many1, digit, lower, string, choice, try, parser };
 
 use ast;
 
-fn p_label<I>(input: State<I>) -> ParseResult<ast::Label, I>
+pub fn p_label<I>(input: State<I>) -> ParseResult<ast::Label, I>
     where I: Stream<Item=char>
 {
     let label = many1(lower()).message("Label");
@@ -12,7 +12,7 @@ fn p_label<I>(input: State<I>) -> ParseResult<ast::Label, I>
     spaces().with(label).parse_state(input)
 }
 
-fn p_signal<I>(input: State<I>) -> ParseResult<ast::Signal, I>
+pub fn p_signal<I>(input: State<I>) -> ParseResult<ast::Signal, I>
     where I: Stream<Item=char>
 {
     let signal =
@@ -23,7 +23,7 @@ fn p_signal<I>(input: State<I>) -> ParseResult<ast::Signal, I>
     spaces().with(signal).parse_state(input)
 }
 
-fn p_source<I>(input: State<I>) -> ParseResult<ast::Source, I>
+pub fn p_source<I>(input: State<I>) -> ParseResult<ast::Source, I>
     where I: Stream<Item=char>
 {
     let label = parser(p_label).map(|s| ast::Source::Wire(s));
@@ -32,7 +32,7 @@ fn p_source<I>(input: State<I>) -> ParseResult<ast::Source, I>
     try(label).or(source).parse_state(input)
 }
 
-fn p_gate1<I>(input: State<I>) -> ParseResult<ast::Gate1, I>
+pub fn p_gate1<I>(input: State<I>) -> ParseResult<ast::Gate1, I>
     where I: Stream<Item=char>
 {
     let choice =
@@ -41,7 +41,7 @@ fn p_gate1<I>(input: State<I>) -> ParseResult<ast::Gate1, I>
     spaces().with(choice).parse_state(input)
 }
 
-fn p_gate2<I>(input: State<I>) -> ParseResult<ast::Gate2, I>
+pub fn p_gate2<I>(input: State<I>) -> ParseResult<ast::Gate2, I>
     where I: Stream<Item=char>
 {
     let choice =
@@ -62,7 +62,7 @@ fn p_gate2<I>(input: State<I>) -> ParseResult<ast::Gate2, I>
     spaces().with(choice).parse_state(input)
 }
 
-fn p_expr<I>(input: State<I>) -> ParseResult<ast::Expr, I>
+pub fn p_expr<I>(input: State<I>) -> ParseResult<ast::Expr, I>
     where I: Stream<Item=char>
 {
     let gate2  =
@@ -84,7 +84,7 @@ fn p_expr<I>(input: State<I>) -> ParseResult<ast::Expr, I>
     spaces().with(match_one).parse_state(input)
 }
 
-fn p_inst<I>(input: State<I>) -> ParseResult<ast::Instruction, I>
+pub fn p_inst<I>(input: State<I>) -> ParseResult<ast::Instruction, I>
     where I: Stream<Item=char>
 {
     let arrow = spaces().with(string("->"));
@@ -95,11 +95,4 @@ fn p_inst<I>(input: State<I>) -> ParseResult<ast::Instruction, I>
             .map(|(e, t)| ast::Instruction { expr: e, target: t });
             
     expr.parse_state(input)
-}
-
-pub fn parse_instruction(s: &str) -> Result<ast::Instruction, String> {
-    match parser(p_inst).parse(s) {
-        Ok((result, _)) => Ok(result),
-        Err(err)        => Err(format!("{}", err))
-    }
 }

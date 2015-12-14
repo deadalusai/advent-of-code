@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry::*;
 
 use parser_ast::ast::*;
-use parser_ast::parser::parse_instruction;
+use parser_ast::parse_instruction;
 
 fn open_file() -> File {
     let filename = args().skip(1).next().expect("usage: day7 {input filename}");
