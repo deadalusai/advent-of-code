@@ -1,72 +1,105 @@
-use combine::{ spaces, many1, digit, lower, string, choice, try, Parser, ParserExt, ParseError };
+use combine::primitives::{ Stream, State };
+use combine::{ Parser, ParserExt, ParseResult };
+use combine::{ spaces, many1, digit, lower, string, choice, try, parser };
 
-use ast::*;
+use ast;
 
-pub type PResult<'a, T> = Result<(T, &'a str), ParseError<&'a str>>;
-
-pub fn parse_instruction(s: &str) -> PResult<Instruction> {
+fn p_label<I>(input: State<I>) -> ParseResult<ast::Label, I>
+    where I: Stream<Item=char>
+{
+    let label = many1(lower()).message("Label");
     
-    // A wire "label" is a sequence of lowercase letters
-    let p_wire_label = || many1(lower()).message("Label");
+    spaces().with(label).parse_state(input)
+}
 
-    // A raw signal is an integer                         
-    let p_signal = || many1(digit()).map(|val: String| val.parse::<Signal>().unwrap()).message("Raw Signal");
+fn p_signal<I>(input: State<I>) -> ParseResult<ast::Signal, I>
+    where I: Stream<Item=char>
+{
+    let signal =
+        many1(digit())
+            .map(|val: String| val.parse::<ast::Signal>().unwrap())
+            .message("Raw Signal");
     
-    let p_source = || {
-        let signal = p_signal().map(|l| Source::Const(l));
-        let wire = p_wire_label().map(|s| Source::Wire(s));
-        spaces().with(
-            signal.or(wire)
-        )
-    };
+    spaces().with(signal).parse_state(input)
+}
+
+fn p_source<I>(input: State<I>) -> ParseResult<ast::Source, I>
+    where I: Stream<Item=char>
+{
+    let label = parser(p_label).map(|s| ast::Source::Wire(s));
+    let source = parser(p_signal).map(|s| ast::Source::Const(s));
+    
+    try(label).or(source).parse_state(input)
+}
+
+fn p_gate1<I>(input: State<I>) -> ParseResult<ast::Gate1, I>
+    where I: Stream<Item=char>
+{
+    let choice =
+        string("NOT").map(|_| ast::Gate1::NOT);
         
-    let p_gate_2 = || {
-        let choice =
-            choice([
-                string("AND"),
-                string("OR"),
-                string("LSHIFT"),
-                string("RSHIFT"),
-            ])
-            .map(|label| match label {
-                "AND"    => Gate2::AND,
-                "OR"     => Gate2::OR,
-                "LSHIFT" => Gate2::LSHIFT,
-                "RSHIFT" => Gate2::RSHIFT,
-                _        => panic!("p_gate_2")
-            });
+    spaces().with(choice).parse_state(input)
+}
+
+fn p_gate2<I>(input: State<I>) -> ParseResult<ast::Gate2, I>
+    where I: Stream<Item=char>
+{
+    let choice =
+        choice([
+            string("AND"),
+            string("OR"),
+            string("LSHIFT"),
+            string("RSHIFT"),
+        ])
+        .map(|label| match label {
+            "AND"    => ast::Gate2::AND,
+            "OR"     => ast::Gate2::OR,
+            "LSHIFT" => ast::Gate2::LSHIFT,
+            "RSHIFT" => ast::Gate2::RSHIFT,
+            _        => panic!("p_gate2")
+        });
+        
+    spaces().with(choice).parse_state(input)
+}
+
+fn p_expr<I>(input: State<I>) -> ParseResult<ast::Expr, I>
+    where I: Stream<Item=char>
+{
+    let gate2  =
+        parser(p_source).and(parser(p_gate2)).and(parser(p_source))
+            .map(|((source1, gate), source2)| ast::Expr::Gate2(gate, source1, source2))
+            .message("Two-input Gate");
             
-        spaces().with(
-            choice
-        )
-    };
-        
-    let p_gate_1 = || {
-        let choice = string("NOT").map(|_| Gate1::NOT);
-        
-        spaces().with(
-            choice
-        )
-    };
-        
+    let gate1 =
+        parser(p_gate1).and(parser(p_source))
+            .map(|(gate, source)| ast::Expr::Gate1(gate, source))
+            .message("One-input Gate");
+            
+    let source =
+        parser(p_source)
+            .map(|source| ast::Expr::Input(source));
+    
+    let match_one = try(gate2).or(try(gate1)).or(source);
+    
+    spaces().with(match_one).parse_state(input)
+}
 
-    let p_expr = || {
-        let gate2 = p_source().and(p_gate_2()).and(p_source()).map(|((source1, gate), source2)| Expr::Gate2(gate, source1, source2)).message("Two-input Gate");
-        let gate1 = p_gate_1().and(p_source())                .map(|(gate, source)|             Expr::Gate1(gate, source))          .message("One-input Gate");
-        let input = p_source()                                .map(|source|                     Expr::Input(source));
-        
-        spaces().with(
-            try(gate2).or(try(gate1)).or(input)
-        )
-    };
+fn p_inst<I>(input: State<I>) -> ParseResult<ast::Instruction, I>
+    where I: Stream<Item=char>
+{
+    let arrow = spaces().with(string("->"));
+    let target = spaces().with(parser(p_label));
     
-    let p_inst = || {
-        let arrow = spaces().with(string("->"));
-        let target = spaces().with(p_wire_label());
-        
-        p_expr().skip(arrow).and(target)
-            .map(|(expr, target)| Instruction { expr: expr, target: target })
-    };
-    
-    p_inst().parse(s)
+    let mut expr =
+        parser(p_expr).skip(arrow).and(target)
+            .map(|(e, t)| ast::Instruction { expr: e, target: t });
+            
+    expr.parse_state(input)
+}
+
+pub fn parse_instruction(s: &str) -> Result<ast::Instruction, String> {
+    match parser(p_inst).parse(s) {
+        Ok((result, _)) => Ok(result),
+        Err(err)        => Err(format!("{}", err))
+    }
 }

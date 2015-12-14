@@ -27,6 +27,6 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub struct Instruction {
-    expr: Expr,
-    target: Label
+    pub expr: Expr,
+    pub target: Label
 }
