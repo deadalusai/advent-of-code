@@ -1,6 +1,3 @@
-#![feature(io, iter_arith)]
-#![allow(dead_code, unused_features)]
-
 extern crate parser_ast;
 
 use std::env::args;
@@ -57,8 +54,22 @@ fn main() {
     }
     
     let signal = resolve_recusive(&mut map, "a");
-    
     println!("Signal on wire a: {:?}", signal);
+    
+    // Part two:
+    // Now, take the signal you got on wire a, override wire b to that signal,
+    // and reset the other wires (including wire a).
+    // What new signal is ultimately provided to wire a?
+
+    for (key, wire) in map.iter_mut() {
+        wire.value = match &key[..] {
+           "b" => Some(signal),
+            _  => None 
+        }     
+    }
+    
+    let signal = resolve_recusive(&mut map, "a");
+    println!("Signal on wire a (take two): {:?}", signal);
 }
 
 fn resolve_recusive(map: &mut HashMap<Label, Wire>, label: &str) -> Signal {
