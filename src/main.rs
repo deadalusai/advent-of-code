@@ -40,23 +40,21 @@ fn parse_distance(s: &str) -> Result<Distance, String> {
     Ok(Distance { from: from, to: to, distance: dist })
 }
 
+type Map = HashMap<String, City>; 
+
 #[derive(Debug)]
 struct City {
     distances: HashMap<String, KMs>
 }
 
-fn update_map(map: &mut HashMap<String, City>, from: &str, to: &str, dist: KMs) {
-    
-    let city = map.entry(from.into()).or_insert_with(|| City { distances: HashMap::new() });
-            
-    city.distances.insert(to.into(), dist);
-}
-
-fn main() {
-    
-    let distances = read_input_file(open_file());
+fn build_map(distances: Vec<Distance>) -> Map {
     
     let mut map = HashMap::new();
+    
+    fn update_map(map: &mut Map, from: &str, to: &str, dist: KMs) {
+        let city = map.entry(from.into()).or_insert_with(|| City { distances: HashMap::new() });
+        city.distances.insert(to.into(), dist);
+    }
     
     for dist in distances {
         //Locate an existing cities in the map and update them
@@ -64,7 +62,68 @@ fn main() {
         update_map(&mut map, &dist.to, &dist.from, dist.distance);
     }
     
-    for (key, value) in map.iter() { 
-        println!("{} = {:?}", key, value);
+    map
+}
+
+fn nearest_neighbour<'a>(map: &'a Map, city_name: &'a str, visited: &Vec<&'a str>) -> Option<(&'a str, KMs)> {
+    
+    let mut nearest: Option<(&'a str, KMs)> = None;
+    
+    for (name, city) in map.iter() {
+        if name == city_name || visited.contains(&&name[..]) {
+            continue;
+        }
+        
+        if let Some(&dist) = city.distances.get(city_name) {
+            
+            match nearest {
+                Some((_, nearest_dist)) if dist < nearest_dist => {
+                    nearest = Some((&name[..], dist));
+                },
+                None => {
+                    nearest = Some((&name[..], dist));
+                },
+                _ => {
+                    
+                }
+            }
+        }
+    }
+    
+    nearest
+}
+
+fn find_shortest_route_starting_from<'a>(map: &'a Map, start: &'a str) -> (Vec<&'a str>, KMs) {
+    
+    let mut route = vec![start];
+    let mut current = start;
+    let mut length = 0;
+    
+    while let Some((next, dist)) = nearest_neighbour(map, current, &route) {
+        
+        current = next;
+        length += dist;
+        route.push(current);
+    }
+    
+    (route, length)
+}
+
+fn main() {
+    
+    let distances = read_input_file(open_file());
+    
+    let map = build_map(distances);
+    
+    let mut routes: Vec<(Vec<&str>, KMs)> =
+        map.keys()
+           .map(|name| find_shortest_route_starting_from(&map, &name))
+           .collect();
+           
+    routes.sort_by(|&(_, ref a), &(_, ref b)| a.cmp(b));
+    
+    for (route, length) in routes {
+         
+        println!("{} kms: {}", length, route.join(" -> "));
     }
 }
