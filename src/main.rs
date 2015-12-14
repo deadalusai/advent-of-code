@@ -22,7 +22,7 @@ struct StringInfo {
     parsed: String
 }
 
-fn ascii_octet(a: char, b: char) -> Option<u8> {
+fn hex_octet(a: char, b: char) -> Option<u8> {
     
     fn hex_char(c: char) -> Option<u8> {
         match c {
@@ -71,7 +71,7 @@ fn parse_quoted_string(source: String) -> Result<StringInfo, String> {
                             let next_two = chars.next().and_then(|a| chars.next().map(|b| (a, b)));
                             //Parse them as a Hex octet
                             let octet = match next_two {
-                                Some((a, b)) => ascii_octet(a, b),
+                                Some((a, b)) => hex_octet(a, b),
                                 None         => return Err("Expected ASCII escape sequence, found nothing".into())
                             };
                             match octet {
@@ -110,9 +110,12 @@ fn main() {
     let mut weird_sum = 0;
     
     for line in lines {
-        println!("{} ({}) -> {} ({})", line.source, line.source.len(), line.parsed, line.parsed.len(), );
+        let source_chars = line.source.chars().count();
+        let parsed_chars = line.parsed.chars().count();
         
-        weird_sum += line.source.len() - line.parsed.len();
+        println!("{} ({}) -> {} ({})", line.source, source_chars, line.parsed, parsed_chars);
+        
+        weird_sum += source_chars - parsed_chars;
     }
     
     println!("Weird sum: {}", weird_sum);
