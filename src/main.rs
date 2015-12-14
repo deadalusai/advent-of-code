@@ -2,16 +2,20 @@ use std::env::args;
 use std::fs::File;
 use std::io::{ BufRead, BufReader };
 
+use std::collections::HashMap;
+
 fn open_file() -> File {
     let filename = args().skip(1).next().expect("usage: day9 {input filename}");
     File::open(filename).expect("Error opening input")
 }
 
+type KMs = u32;
+
 #[derive(Debug)]
 struct Distance {
     from: String,
     to: String,
-    distance: u32
+    distance: KMs
 }
 
 fn read_input_file(file: File) -> Vec<Distance> {
@@ -36,13 +40,31 @@ fn parse_distance(s: &str) -> Result<Distance, String> {
     Ok(Distance { from: from, to: to, distance: dist })
 }
 
+#[derive(Debug)]
+struct City {
+    distances: HashMap<String, KMs>
+}
+
+fn update_map(map: &mut HashMap<String, City>, from: &str, to: &str, dist: KMs) {
+    
+    let city = map.entry(from.into()).or_insert_with(|| City { distances: HashMap::new() });
+            
+    city.distances.insert(to.into(), dist);
+}
+
 fn main() {
     
     let distances = read_input_file(open_file());
     
+    let mut map = HashMap::new();
+    
     for dist in distances {
-        
-        println!("{:?}", &dist);
+        //Locate an existing cities in the map and update them
+        update_map(&mut map, &dist.from, &dist.to, dist.distance);
+        update_map(&mut map, &dist.to, &dist.from, dist.distance);
     }
     
+    for (key, value) in map.iter() { 
+        println!("{} = {:?}", key, value);
+    }
 }
