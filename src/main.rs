@@ -1,7 +1,7 @@
 use std::env::args;
 use std::fs::File;
 
-use std::io::Write;
+use std::fmt::Write;
 use std::io::{ BufRead, BufReader };
 
 fn open_file() -> File {
@@ -28,20 +28,18 @@ fn count_digits(s: &str) -> Vec<(u32, u32)> {
     
     for c in s.chars() {
         let n = char_to_u32(c);
-        
-        current = 
-            if let Some((num, count)) = current {
-                if num != n {
-                    data.push((num, count));
-                    Some((n, 1))
-                }
-                else {
-                    Some((num, count + 1))
-                }
-            }
-            else {
+        current = match current {
+            None => {
                 Some((n, 1))
-            };
+            },
+            Some((num, count)) if num != n => {
+                data.push((num, count));
+                Some((n, 1))
+            },
+            Some((num, count)) => {
+                Some((num, count + 1))
+            }
+        };
     }
     
     if let Some(pair) = current {
@@ -53,29 +51,27 @@ fn count_digits(s: &str) -> Vec<(u32, u32)> {
 
 fn build_look_and_say_string(counts: &Vec<(u32, u32)>) -> String {
     
-    let mut buf = Vec::new();
+    let mut buf = String::with_capacity(counts.len() * 2);
     
     for &(num, count) in counts {
         write!(&mut buf, "{}{}", count, num).unwrap();
     }
     
-    String::from_utf8(buf).unwrap()
+    buf
 }
 
 fn main() {
     
-    let input = read_input(open_file());
+    let mut input = read_input(open_file());
     
     println!("iteration 0 -> {}", input);
     
-    let mut s = input;
-    
-    for it in 0..40 {
+    for it in 0..50 {
         
-        let counts = count_digits(&s);
+        let counts = count_digits(&input);
         
-        s = build_look_and_say_string(&counts);
+        input = build_look_and_say_string(&counts);
         
-        println!("iteration {} -> {}", it + 1, s.chars().count());
+        println!("iteration {} -> {}", it + 1, input.chars().count());
     }
 }
