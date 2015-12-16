@@ -13,13 +13,20 @@ fn read_input(file: File) -> String {
     BufReader::new(file).lines().map(|line| line.expect("Error reading file"))
                         .next().expect("No lines in input")
 }
-    
+
 fn char_to_alpha_index(c: char) -> u8 {
-    c as u8 - 'a' as u8
+    match c {
+        'a'...'z' => c as u8 - 'a' as u8,
+         _        => panic!("Character '{}' out of range", c)
+    }
 }
 
 fn alpha_index_to_char(i: u8) -> char {
-    ('a' as u8 + i) as char
+    match i {
+        0...25 => ('a' as u8 + i) as char,
+        _      => panic!("Alpha index '{}' invalid", i) 
+    }
+    
 }
 
 fn check_non_overlapping_pairs(s: &[u8]) -> bool {
