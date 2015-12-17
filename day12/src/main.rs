@@ -20,9 +20,20 @@ fn read_input(mut file: File) -> Value {
     serde_json::from_str(&json).expect("Error parsing input")
 }
 
+fn is_red_value(json: &Value) -> bool {
+    match json {
+        &Value::String(ref val) => val == "red",
+        _                       => false
+    }
+}
+
 fn recursive_sum_numbers(json: &Value) -> i64 {
     match json {
         &Value::Object(ref map) => {
+            // Challenge two - discount any objects with a "red" property value
+            if map.iter().any(|(_, val)| is_red_value(val)) {
+                return 0;
+            }
             map.iter()
                .map(|(_, val)| recursive_sum_numbers(val))
                .sum()
