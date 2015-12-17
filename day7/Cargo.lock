@@ -1,0 +1,19 @@
+[root]
+name = "day7"
+version = "0.1.0"
+dependencies = [
+ "parser_ast 0.1.0",
+]
+
+[[package]]
+name = "combine"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "parser_ast"
+version = "0.1.0"
+dependencies = [
+ "combine 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
