@@ -10,7 +10,7 @@ use std::io::{ Read };
 use serde_json::{ Value };
 
 fn open_file() -> File {
-    let filename = args().skip(1).next().expect("usage: day11 {input filename}");
+    let filename = args().skip(1).next().expect("usage: day12 {input filename}");
     File::open(filename).expect("Error opening input")
 }
 
