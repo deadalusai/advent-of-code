@@ -85,15 +85,15 @@ fn main() {
     }
 
     //Part two - add yourself to the mix (with no relationship baggage)
-    people.insert("My own good self".into());
+    people.insert("My own good self");
 
     let mut happiness_delta_max = 0;
 
-    for p in permute(people.iter()) {
+    for peeps in permute(people.iter()) {
 
         let mut happiness_delta = 0;
 
-        for (&left, &right) in pairs(p.iter()) {
+        for (left, right) in pairs(peeps.into_iter()) {
 
             let mut check = |a, b| {
                 match relationships.get(a).and_then(|rel| rel.get(b)) {

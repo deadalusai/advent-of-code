@@ -20,7 +20,7 @@ impl <'a, T> Iterator for Permute<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        // Simple case - source of one elements
+        // Simple case - source of one or less elements
         if self.source.len() <= 1 {
             let result = match self.index {
                 0 => Some(self.source.clone()),
@@ -34,7 +34,7 @@ impl <'a, T> Iterator for Permute<'a, T> {
         if self.source.len() == 2 {
             let result = match self.index {
                 0 => Some(self.source.clone()),
-                1 => Some(vec![self.source[1].clone(), self.source[0].clone()]),
+                1 => Some(vec![self.source[1], self.source[0]]),
                 _ => None
             };
             self.index += 1;
@@ -47,34 +47,28 @@ impl <'a, T> Iterator for Permute<'a, T> {
                 return None;
             }
 
+            // Start the sub-iterator?
             if self.sub.is_none() {
-                let source: Vec<_> =
-                    self.source.iter()
-                        .enumerate()
-                        .filter(|&(i, _)| i != self.index)
-                        .map(|(_, v)| v.clone())
+                // Permute `source` excepting the current element
+                let source =
+                    self.source.iter().enumerate()
+                        .filter_map(|(i, v)| if i != self.index { Some(*v) } else { None })
                         .collect();
 
                 let inner = Box::new(permute_raw(source));
                 self.sub = Some(inner);
             }
 
-            let next = match self.sub.as_mut().unwrap().next() {
-                None => None,
-                Some(mut v) => {
-                    v.insert(0, self.source[self.index].clone());
-                    Some(v)
-                }
-            };
+            // Get the next result from the sub-iterator?
+            if let Some(mut v) = self.sub.as_mut().unwrap().next() {
+                // Got a result? Push the current element onto the end and return
+                v.push(self.source[self.index]);
+                return Some(v);
+            }
 
-            if next.is_none() {
-                //Reached the end of the sub iterator!
-                self.sub = None;
-                self.index += 1;
-            }
-            else {
-                return next;
-            }
+            // Sub-iterator finished? Reset it and step.
+            self.sub = None;
+            self.index += 1;
         }
     }
 }
