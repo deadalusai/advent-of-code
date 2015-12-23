@@ -106,6 +106,8 @@ fn main() {
         people.insert(inst.person.clone());
         relationships.insert((inst.person, inst.neighbour), inst.change);
     }
+    
+    people.insert("My own good self".into());
 
     let people: Vec<String> = people.into_iter().collect();
     
