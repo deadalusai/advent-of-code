@@ -1,3 +1,5 @@
+#![feature(convert)]
+
 extern crate regex;
 
 mod permute;
@@ -70,38 +72,39 @@ fn main() {
 
     let instructions = read_input(open_file());
 
-    let mut people = HashSet::new();
-    let mut relationships = HashMap::new();
+    // Collate distinct people in the instruction set
+    let mut people: HashSet<_> =
+        instructions.iter().map(|s| s.person.as_str()).collect();
 
-    for inst in instructions {
-        people.insert(inst.person.clone());
-        relationships.insert((inst.person, inst.neighbour), inst.change);
+    // Build lookup table of relationships
+    let mut relationships = HashMap::new();
+    for inst in instructions.iter() {
+        relationships.entry(inst.person.as_str())
+                     .or_insert_with(|| HashMap::new())
+                     .insert(inst.neighbour.as_str(), &inst.change);
     }
 
+    //Part two - add yourself to the mix (with no relationship baggage)
     people.insert("My own good self".into());
-
-    let people: Vec<String> = people.into_iter().collect();
 
     let mut happiness_delta_max = 0;
 
-    for p in permute(&people) {
+    for p in permute(people.iter()) {
 
         let mut happiness_delta = 0;
 
-        for (&left, &right) in pairs(&p) {
+        for (&&left, &&right) in pairs(&p) {
 
-            let keys = [
-                (left.clone(), right.clone()),
-                (right.clone(), left.clone())
-            ];
-
-            for key in keys.iter() {
-                match relationships.get(key) {
-                    Some(&Change::Gain(amt)) => { happiness_delta += amt; },
-                    Some(&Change::Lose(amt)) => { happiness_delta -= amt; },
+            let mut check = |a, b| {
+                match relationships.get(a).and_then(|rel| rel.get(b)) {
+                    Some(&&Change::Gain(amt)) => { happiness_delta += amt; },
+                    Some(&&Change::Lose(amt)) => { happiness_delta -= amt; },
                     _ => {}
                 }
-            }
+            };
+
+            check(left, right);
+            check(right, left);
         }
 
         if happiness_delta > happiness_delta_max {

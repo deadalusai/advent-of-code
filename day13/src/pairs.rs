@@ -1,6 +1,10 @@
 
 //! Iterates through pairs in an array (first and last element are a pair)
 
+pub fn pairs<'a, T>(source: &'a [T]) -> Pairs<'a, T> {
+    Pairs { source: source, i: 0 }
+}
+
 pub struct Pairs<'a, T: 'a> {
     source: &'a [T],
     i: usize
@@ -21,8 +25,4 @@ impl <'a, T> Iterator for Pairs<'a, T> {
         self.i += 1;
         next
     }
-}
-
-pub fn pairs<'a, T>(source: &'a [T]) -> Pairs<'a, T> {
-    Pairs { source: source, i: 0 }
 }

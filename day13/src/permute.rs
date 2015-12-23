@@ -1,9 +1,8 @@
 
 //! Experimental iterative permutator
-//! (Takes ownership and requires copy)
 
-pub fn permute<T>(arr: &[T]) -> Permute<T> {
-    permute_raw(arr.iter().collect())
+pub fn permute<'a, T: 'a, I: Iterator<Item=&'a T>>(iter: I) -> Permute<'a, T> {
+    permute_raw(iter.collect())
 }
 
 fn permute_raw<'a, T: 'a>(arr: Vec<&'a T>) -> Permute<'a, T> {
