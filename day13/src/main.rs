@@ -93,7 +93,7 @@ fn main() {
 
         let mut happiness_delta = 0;
 
-        for (&&left, &&right) in pairs(&p) {
+        for (&left, &right) in pairs(p.iter()) {
 
             let mut check = |a, b| {
                 match relationships.get(a).and_then(|rel| rel.get(b)) {

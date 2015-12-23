@@ -1,28 +1,36 @@
 
-//! Iterates through pairs in an array (first and last element are a pair)
+//! Iterates through pairs in an input sequence (first and last element are a pair)
 
-pub fn pairs<'a, T>(source: &'a [T]) -> Pairs<'a, T> {
-    Pairs { source: source, i: 0 }
+use std::iter::Peekable;
+
+pub fn pairs<T, I: Iterator<Item=T>>(iter: I) -> Pairs<T, I> {
+    Pairs { source: iter.peekable(), first: None }
 }
 
-pub struct Pairs<'a, T: 'a> {
-    source: &'a [T],
-    i: usize
+pub struct Pairs<T, I: Iterator<Item=T>> {
+    source: Peekable<I>,
+    first: Option<T>
 }
 
-impl <'a, T> Iterator for Pairs<'a, T> {
-    type Item = (&'a T, &'a T);
+impl <T: Copy, I: Iterator<Item=T>> Iterator for Pairs<T, I> {
+    type Item = (T, T);
 
     fn next(&mut self) -> Option<Self::Item> {
-
-        let len = self.source.len();
-        let next = match self.i {
-            i if i == len - 1 => Some((&self.source[i], &self.source[0])),
-            i if i >= len     => None,
-            i                 => Some((&self.source[i], &self.source[i + 1]))
-        };
-
-        self.i += 1;
-        next
+        match self.source.next() {
+            Some(a) => {
+                //Keep a copy of the first yielded element
+                if self.first.is_none() {
+                    self.first = Some(a);
+                }
+                //Peek at the next element
+                match self.source.peek() {
+                    // Found a pair! Yield it...
+                    Some(&b) => Some((a, b)),
+                    //End of the input! Yield last pair...
+                    None => self.first.map(|b| (a, b))
+                }
+            },
+            None => None
+        }
     }
 }
