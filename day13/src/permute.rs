@@ -2,14 +2,22 @@
 //! Experimental iterative permutator
 //! (Takes ownership and requires copy)
 
-pub struct Permute<T> {
-    source: Vec<T>,
-    index: usize,
-    sub: Option<Box<Permute<T>>>,
+pub fn permute<T>(arr: &[T]) -> Permute<T> {
+    permute_raw(arr.iter().collect())
 }
 
-impl <T: Clone> Iterator for Permute<T> {
-    type Item = Vec<T>;
+fn permute_raw<'a, T: 'a>(arr: Vec<&'a T>) -> Permute<'a, T> {
+    Permute { source: arr, index: 0, sub: None }
+}
+
+pub struct Permute<'a, T: 'a> {
+    source: Vec<&'a T>,
+    index: usize,
+    sub: Option<Box<Permute<'a, T>>>,
+}
+
+impl <'a, T> Iterator for Permute<'a, T> {
+    type Item = Vec<&'a T>;
 
     fn next(&mut self) -> Option<Self::Item> {
 
@@ -41,13 +49,15 @@ impl <T: Clone> Iterator for Permute<T> {
             }
 
             if self.sub.is_none() {
-                let source = self.source.iter()
-                                 .enumerate()
-                                 .filter(|&(i, _)| i != self.index)
-                                 .map(|(_, v)| v.clone())
-                                 .collect();
+                let source: Vec<_> =
+                    self.source.iter()
+                        .enumerate()
+                        .filter(|&(i, _)| i != self.index)
+                        .map(|(_, v)| v.clone())
+                        .collect();
 
-                self.sub = Some(Box::new(permute(source)));
+                let inner = Box::new(permute_raw(source));
+                self.sub = Some(inner);
             }
 
             let next = match self.sub.as_mut().unwrap().next() {
@@ -68,8 +78,4 @@ impl <T: Clone> Iterator for Permute<T> {
             }
         }
     }
-}
-
-pub fn permute<T>(arr: Vec<T>) -> Permute<T> {
-    Permute { source: arr, index: 0, sub: None }
 }

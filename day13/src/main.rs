@@ -84,11 +84,11 @@ fn main() {
 
     let mut happiness_delta_max = 0;
 
-    for p in permute(people) {
+    for p in permute(&people) {
 
         let mut happiness_delta = 0;
 
-        for (left, right) in pairs(&p) {
+        for (&left, &right) in pairs(&p) {
 
             let keys = [
                 (left.clone(), right.clone()),
@@ -97,8 +97,8 @@ fn main() {
 
             for key in keys.iter() {
                 match relationships.get(key) {
-                    Some(&Change::Gain(ref amt)) => { happiness_delta += *amt; },
-                    Some(&Change::Lose(ref amt)) => { happiness_delta -= *amt; },
+                    Some(&Change::Gain(amt)) => { happiness_delta += amt; },
+                    Some(&Change::Lose(amt)) => { happiness_delta -= amt; },
                     _ => {}
                 }
             }
