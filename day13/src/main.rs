@@ -84,17 +84,21 @@ fn main() {
                      .insert(inst.neighbour.as_str(), &inst.change);
     }
 
-    //Part two - add yourself to the mix (with no relationship baggage)
+    // Part two - add yourself to the mix (with no relationship baggage)
     people.insert("My own good self");
 
     let mut happiness_delta_max = 0;
+    let mut best_sort = None;
 
+    // Permute lazily generates all permutations of the given sequence
     for peeps in permute(people.iter()) {
 
         let mut happiness_delta = 0;
 
-        for (left, right) in pairs(peeps.into_iter()) {
+        // Pairs lazily iterates over all adjacent pairs in the given sequence
+        for (&left, &right) in pairs(peeps.iter()) {
 
+            // Checks for a relationship betweek a and b...
             let mut check = |a, b| {
                 match relationships.get(a).and_then(|rel| rel.get(b)) {
                     Some(&&Change::Gain(amt)) => { happiness_delta += amt; },
@@ -103,14 +107,17 @@ fn main() {
                 }
             };
 
+            // Be sure to check the relationship from both directions!
             check(left, right);
             check(right, left);
         }
 
         if happiness_delta > happiness_delta_max {
             happiness_delta_max = happiness_delta;
+            best_sort = Some(peeps);
         }
     }
 
     println!("Biggest happiness change: {}", happiness_delta_max);
+    println!("Best order: {:?}", best_sort);
 }
