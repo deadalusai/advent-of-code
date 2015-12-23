@@ -117,18 +117,19 @@ fn main() {
         
         let mut happiness_delta = 0;
     
-        for (left, right) in pairs_in_vec(&p) {
+        for (left, right) in pairs(&p) {
             
-            match relationships.get(&(left.clone(), right.clone())) {
-                Some(&Change::Gain(ref amt)) => { happiness_delta += *amt; },
-                Some(&Change::Lose(ref amt)) => { happiness_delta -= *amt; },
-                _ => {}
-            }
+            let keys = [
+                (left.clone(), right.clone()), 
+                (right.clone(), left.clone())
+            ];
             
-            match relationships.get(&(right.clone(), left.clone())) {
-                Some(&Change::Gain(ref amt)) => { happiness_delta += *amt; },
-                Some(&Change::Lose(ref amt)) => { happiness_delta -= *amt; },
-                _ => {}
+            for key in keys.iter() {
+                match relationships.get(key) {
+                    Some(&Change::Gain(ref amt)) => { happiness_delta += *amt; },
+                    Some(&Change::Lose(ref amt)) => { happiness_delta -= *amt; },
+                    _ => {}
+                }
             }
         }
         
@@ -140,17 +141,32 @@ fn main() {
     println!("Biggest happiness change: {}", happiness_delta_max);
 }
 
-fn pairs_in_vec<'a, T>(items: &'a Vec<T>) -> Vec<(&'a T, &'a T)> {
-    let len = items.len();
-    if len == 0 {
-        return Vec::new();
+// Iterates through pairs in an array (first and last element are a pair)
+
+fn pairs<'a, T>(source: &'a [T]) -> Pairs<'a, T> {
+    Pairs { source: source, i: 0 }
+}
+
+struct Pairs<'a, T: 'a> {
+    source: &'a [T],
+    i: usize
+}
+
+impl <'a, T> Iterator for Pairs<'a, T> {
+    type Item = (&'a T, &'a T);
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        
+        let len = self.source.len();
+        let next = match self.i {
+            i if i == len - 1 => Some((&self.source[i], &self.source[0])),
+            i if i >= len     => None,
+            i                 => Some((&self.source[i], &self.source[i + 1]))
+        };
+        
+        self.i += 1;
+        next
     }
-    (0..len)
-        .map(|i| {
-            if i == len - 1 { (&items[i], &items[0]) }
-            else            { (&items[i], &items[i + 1]) }
-        })
-        .collect()
 }
 
 // Experimental iterative permutator
