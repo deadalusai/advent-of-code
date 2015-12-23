@@ -60,7 +60,8 @@ fn main() {
                 reindeer: r,
                 kms_travelled: 0,
                 resting: false,
-                secs: 0
+                secs: 0,
+                points: 0
             })
             .collect();
 
@@ -68,11 +69,21 @@ fn main() {
         for s in states.iter_mut() {
             step(s);
         }
+
+        //Part 2 - find the leading reindeer
+        if let Some(max_dist) = states.iter().map(|s| s.kms_travelled).max() {
+            // And award them a point
+            for leader in states.iter_mut().filter(|s| s.kms_travelled == max_dist) {
+                leader.points += 1;
+            }
+        }
     }
 
-    let best_dist = states.iter().map(|s| s.kms_travelled).max();
+    let best_dist = states.iter().max_by_key(|s| s.kms_travelled).unwrap();
+    let best_points = states.iter().max_by_key(|s| s.points).unwrap();
 
-    println!("Best distance: {:?}", best_dist);
+    println!("Best distance: {} ({})", best_dist.reindeer.name, best_dist.kms_travelled);
+    println!("Highest points: {} ({})", best_points.reindeer.name, best_points.points);
 }
 
 struct State<'a> {
@@ -82,6 +93,9 @@ struct State<'a> {
 
     //Seconds since last state change
     secs: i32,
+
+    //Part 2 - points awarded
+    points: u32,
 }
 
 fn step(state: &mut State) {
