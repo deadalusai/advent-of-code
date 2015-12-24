@@ -19,15 +19,25 @@ struct Memory {
 
 fn parse_memory(s: &str) -> Result<Memory, String> {
 
-    let pattern = r"([A-Za-z]+) (\d+):(?:\s+([a-z]+): (\d+),?)*";
-    let re = Regex::new(pattern).unwrap();
+    let re = Regex::new(r"^Sue (\d+):").unwrap();
+    let number = match re.captures(s) {
+        None => return Err("Unable to parse memory".into()),
+        Some(caps) => caps.at(1).unwrap().parse().unwrap()
+    };
 
-    match re.captures(s) {
-        None => Err("Unable to parse memory".into()),
-        Some(caps) => {
-            unimplemented!()
-        }
+    let mut things = HashMap::new();
+
+    // Can't seem to access repeated sub-patterns with a single regex?
+    // Need to break this out into two steps
+
+    let re = Regex::new(r"([a-z]+): (\d+)(,|$)").unwrap();
+    for caps in re.captures_iter(s) {
+        let name = caps.at(1).unwrap().into();
+        let count = caps.at(2).unwrap().parse().unwrap();
+        things.insert(name, count);
     }
+
+    Ok(Memory { number: number, things: things })
 }
 
 fn read_input(file: File) -> Vec<Memory> {
