@@ -52,14 +52,6 @@ fn read_input(file: File) -> Vec<Memory> {
 
 fn main() {
 
-    let memories = read_input(open_file());
-
-    let mut aunts: Vec<_> =
-        memories
-            .into_iter()
-            .map(|mem| (mem, 0_u32))
-            .collect();
-
     let facts = {
         let mut h = HashMap::new();
         h.insert("children", 3);
@@ -75,27 +67,31 @@ fn main() {
         h
     };
 
-    //Compare facts and memories to calculate a score for each Aunt
+    let memories = read_input(open_file());
 
-    for &mut (ref mem, ref mut score) in aunts.iter_mut() {
-        for key in mem.things.keys().map(|s| s.as_str()) {
-            let fact   = facts.get(key).unwrap();
-            let memory = mem.things.get(key).unwrap();
-            let is_match = match key {
-                "cats"        | "trees"    => memory > fact,
-                "pomeranians" | "goldfish" => memory < fact,
-                _                          => fact == memory
-            };
-            if is_match  {
-                *score += 1;
-            }
-        }
-    }
+    //Compare facts and memories to filter out invalid Aunts
 
-    let &(ref best_match, _) =
-        aunts.iter()
-             .max_by_key(|&&(_, score)| score)
-             .unwrap();
+    let best_match =
+        memories.iter()
+                .filter(|mem| {
+                    // For each memory of this aunt...
+                    for (key, &memory) in mem.things.iter() {
+                        let key = key.as_str();
+                        // ...compare it with the facts
+                        let fact = *facts.get(key).unwrap();
+                        let is_match = match key {
+                            "cats"        | "trees"    => memory > fact,
+                            "pomeranians" | "goldfish" => memory < fact,
+                            _                          => memory == fact
+                        };
+                        if !is_match  {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .next()
+                .unwrap();
 
     println!("Best aunt match: {}", best_match.number);
 }
