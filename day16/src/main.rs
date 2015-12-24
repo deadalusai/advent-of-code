@@ -1,3 +1,5 @@
+#![feature(convert)]
+
 extern crate regex;
 
 use std::env::args;
@@ -52,7 +54,43 @@ fn main() {
 
     let memories = read_input(open_file());
 
-    for mem in &memories {
-        println!("{:?}", mem);
+    let mut aunts: Vec<_> =
+        memories
+            .into_iter()
+            .map(|mem| (mem, 0_u32))
+            .collect();
+
+    let facts = {
+        let mut h = HashMap::new();
+        h.insert("children", 3);
+        h.insert("cats", 7);
+        h.insert("samoyeds", 2);
+        h.insert("pomeranians", 3);
+        h.insert("akitas", 0);
+        h.insert("vizslas", 0);
+        h.insert("goldfish", 5);
+        h.insert("trees", 3);
+        h.insert("cars", 2);
+        h.insert("perfumes", 1);
+        h
+    };
+
+    //Compare facts and memories to calculate a score for each Aunt
+
+    for &mut (ref mem, ref mut score) in aunts.iter_mut() {
+        for key in mem.things.keys() {
+            let fact1 = facts.get(key.as_str());
+            let fact2 = mem.things.get(key);
+            if fact1 == fact2 {
+                *score += 1;
+            }
+        }
     }
+
+    let &(ref best_match, _) =
+        aunts.iter()
+             .max_by_key(|&&(_, score)| score)
+             .unwrap();
+
+    println!("Best aunt match: {}", best_match.number);
 }
