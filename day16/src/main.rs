@@ -78,10 +78,15 @@ fn main() {
     //Compare facts and memories to calculate a score for each Aunt
 
     for &mut (ref mem, ref mut score) in aunts.iter_mut() {
-        for key in mem.things.keys() {
-            let fact1 = facts.get(key.as_str());
-            let fact2 = mem.things.get(key);
-            if fact1 == fact2 {
+        for key in mem.things.keys().map(|s| s.as_str()) {
+            let fact   = facts.get(key).unwrap();
+            let memory = mem.things.get(key).unwrap();
+            let is_match = match key {
+                "cats"        | "trees"    => memory > fact,
+                "pomeranians" | "goldfish" => memory < fact,
+                _                          => fact == memory
+            };
+            if is_match  {
                 *score += 1;
             }
         }
