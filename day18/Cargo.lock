@@ -1,0 +1,12 @@
+[root]
+name = "day18"
+version = "0.1.0"
+dependencies = [
+ "gol 0.0.3 (git+https://github.com/deadalusai/gol-rs)",
+]
+
+[[package]]
+name = "gol"
+version = "0.0.3"
+source = "git+https://github.com/deadalusai/gol-rs#0bcb9977c9a02f06b327b2777bedbb8c1d0ab6c9"
+
