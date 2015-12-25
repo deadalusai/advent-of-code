@@ -12,18 +12,25 @@ fn main() {
         //20, 15, 10, 5, 5
     ];
 
-    let mut count = 0;
+    let mut all_sets = Vec::new();
 
     for size in 2 .. input.len() {
         for set in combinations(input.clone(), size) {
 
             let sum: u32 = set.iter().sum();
             if sum == target {
-                //println!("{:?}", &set);
-                count += 1;
+                all_sets.push(set);
             }
         }
     }
 
-    println!("Count: {}", count);
+    println!("Count: {}", all_sets.len());
+
+    let shortest_len = all_sets.iter().map(|s| s.len()).min().unwrap();
+
+    println!("Shortest length: {}", shortest_len);
+
+    let short_set_count = all_sets.iter().filter(|s| s.len() == shortest_len).count();
+
+    println!("Short set count: {}", short_set_count);
 }
