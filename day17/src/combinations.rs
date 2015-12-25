@@ -1,16 +1,4 @@
 
-pub fn combinations_from_iter<T, I>(iter: I, r: usize) -> Combinations<T>
-    where T: Copy,
-          I: Iterator<Item=T>
-{
-    Combinations {
-        pool: iter.collect(),
-        indices: (0..r).collect(),
-        r: r,
-        state: 0
-    }
-}
-
 pub fn combinations<T>(pool: Vec<T>, r: usize) -> Combinations<T>
     where T: Copy
 {
