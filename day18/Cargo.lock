@@ -8,5 +8,5 @@ dependencies = [
 [[package]]
 name = "gol"
 version = "0.0.4"
-source = "git+https://github.com/deadalusai/gol-rs#01252fa3199a79f6d28fd477596acc5682ca9cce"
+source = "git+https://github.com/deadalusai/gol-rs#7ee14716f01f5a05fcc3710d3a84ef4ef933ce76"
 
