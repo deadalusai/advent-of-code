@@ -8,6 +8,7 @@ use std::io::{ Read };
 
 use gol::grid::{ Grid, Cell };
 use gol::world::{ World };
+use gol::rules::terminal_neighbours;
 
 fn open_file() -> File {
     let filename = args().skip(1).next().expect("usage: day18 {input filename}");
@@ -40,6 +41,9 @@ fn main() {
     let initial_grid = read_input(open_file());
 
     let mut world = World::new(initial_grid);
+
+    // Simulating a terminal world
+    world.set_neighbours(terminal_neighbours);
 
     for _ in 0 .. iterations {
         world.step_mut();
