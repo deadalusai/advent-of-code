@@ -1,4 +1,4 @@
-#![feature(iter_arith, io)]
+#![feature(io)]
 
 extern crate gol;
 
@@ -55,13 +55,9 @@ fn main() {
 
     let live_cell_count: usize =
         world.grid()
-             .iter_rows()
-             .map(|row| {
-                 row.iter()
-                    .filter(|c| c.is_live())
-                    .count()
-             })
-             .sum();
+             .iter_cells()
+             .filter(|&(_, _, cell)| cell.is_live())
+             .count();
 
     println!("Lights on after {} iterations: {}", iterations, live_cell_count);
 }
