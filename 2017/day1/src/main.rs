@@ -14,10 +14,13 @@ fn main() {
         .flat_map(|line| line.trim().chars())
         .map(char_to_number)
         .collect();
-
+    
     let mut sum = 0;
     let len = numbers.len();
-    let step = 1;
+    // Day 1 Part 1
+    // let step = 1;
+    // Day 1 Part 2
+    let step = len / 2;
 
     for i in 0..len {
         
