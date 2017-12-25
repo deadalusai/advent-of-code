@@ -1,4 +1,4 @@
-mod input;
+extern crate input;
 
 fn char_to_number (c: char) -> u32 {
     match c {
