@@ -10,13 +10,13 @@ pub fn read_input <P> (input_path: P) -> Result<Vec<String>, IoError>
     let file = File::open(input_path.as_ref())?;
     let mut input = BufReader::new(file);
 
+    let mut line = String::new();
     loop {
-        let mut line = String::new();
         if input.read_line(&mut line)? == 0 {
             break;
         }
-        result.push(line);
+        result.push(line.trim().to_string());
+        line.clear();
     }
-
     Ok(result)
 }
