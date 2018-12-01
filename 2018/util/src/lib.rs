@@ -1,3 +1,5 @@
+pub mod error;
+
 use std::path::{ Path };
 use std::io::{ BufRead, BufReader, Error as IoError };
 use std::fs::{ File };

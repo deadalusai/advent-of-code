@@ -2,10 +2,10 @@
 name = "day1"
 version = "0.1.0"
 dependencies = [
- "input 0.1.0",
+ "util 0.1.0",
 ]
 
 [[package]]
-name = "input"
+name = "util"
 version = "0.1.0"
 

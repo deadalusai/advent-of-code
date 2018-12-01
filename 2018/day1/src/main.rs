@@ -1,19 +1,21 @@
-extern crate input;
+extern crate util;
 
-use input::read_input;
+use util::{ read_input };
+use util::error::{ AppErr };
 
 use std::collections::hash_set::HashSet;
 
-fn parse_delta(s: &String) -> i32 {
+fn parse_delta(s: &str) -> Result<i32, AppErr> {
     let sign = match s.bytes().next() {
-        Some(b'+') => 1,
-        Some(b'-') => -1,
-        _ => panic!("Failed to read sign"),
-    };
-    &s[1..].parse::<i32>().expect("Failed to parse delta") * sign
+        Some(b'+') => Ok(1),
+        Some(b'-') => Ok(-1),
+        _ => Err(AppErr::new("Parse", "bad sign")),
+    }?;
+    let delta = &s[1..].parse::<i32>()? * sign;
+    Ok(delta)
 }
 
-fn main() {
+fn main() -> Result<(), AppErr> {
     /*
     --- Part One ---
     After feeling like you've been falling for a few minutes, you look at the device's tiny screen. "Error: Device must be calibrated before first use. Frequency drift detected. Cannot maintain destination lock." Below the message, the device shows a sequence of changes in frequency (your puzzle input). A value like +6 means the current frequency increases by 6; a value like -3 means the current frequency decreases by 3.
@@ -34,10 +36,10 @@ fn main() {
     Starting with a frequency of zero, what is the resulting frequency after all of the changes in frequency have been applied?
     */
     let result = 
-        read_input("input.txt").expect("Failed to read input")
+        read_input("input.txt")?
             .iter()
-            .map(parse_delta)
-            .sum::<i32>();
+            .map(|s| parse_delta(s))
+            .sum::<Result<i32, AppErr>>()?;
 
     println!("Part 1 result: {}", result);
 
@@ -65,10 +67,10 @@ fn main() {
     What is the first frequency your device reaches twice?
     */
     let deltas =
-        read_input("input.txt").expect("Failed to read input")
-            .into_iter()
-            .map(|s| parse_delta(&s))
-            .collect::<Vec<i32>>();
+        read_input("input.txt")?
+            .iter()
+            .map(|s| parse_delta(s))
+            .collect::<Result<Vec<i32>, AppErr>>()?;
 
     let mut seen = HashSet::new();
     let mut sum = 0;
@@ -83,4 +85,5 @@ fn main() {
     }
 
     println!("Part 2 result: {} found in {} samples", sum, seen.len());
+    Ok(())
 }

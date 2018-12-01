@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Benjamin Fox <deadalus.ai@gmail.com>"]
 
 [dependencies]
-input = { path = "../input" }
+util = { path = "../util" }
