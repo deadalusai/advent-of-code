@@ -68,27 +68,27 @@ fn main() -> Result<(), AppErr> {
     What letters are common between the two correct box IDs?
     (In the example above, this is found by removing the differing character from either ID, producing fgij.)
     */
-    fn fuzzy_id_match(id1: &str, id2: &str) -> Option<String> {
-        let matching_chars = || id1.chars().zip(id2.chars()).filter(|(c1, c2)| c1 == c2);
-        let matching_count = matching_chars().count();
-        if matching_count == id1.len() - 1 {
-            Some(matching_chars().map(|(c1, _)| c1).collect::<String>())
-        } else {
-            None
-        }
-    }
-
-    let mut id_match = None;
-    'outer: for id1 in &ids {
-        for id2 in &ids {
-            id_match = fuzzy_id_match(id1, id2);
-            if id_match.is_some() {
-                break 'outer;
+    fn fuzzy_id_search(ids: &[String]) -> Option<String> {
+        for id1 in ids {
+            for id2 in ids {
+                let found_id =
+                    id1.chars().zip(id2.chars())
+                        .filter_map(|(c1, c2)| {
+                            if c1 == c2 { Some(c1) }
+                            else { None }
+                        })
+                        .collect::<String>();
+                
+                if found_id.len() == id1.len() - 1 {
+                    return Some(found_id);
+                }
             }
         }
+        None
     }
 
-    let result = id_match.ok_or(fail("Unable to find matching IDs"))?;
+    let result = fuzzy_id_search(&ids).ok_or(fail("Unable to find matching IDs"))?;
+
     println!("Part 2 result: {}", result);
 
     Ok(())
