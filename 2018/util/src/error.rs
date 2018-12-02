@@ -15,6 +15,10 @@ impl AppErr {
     }
 }
 
+pub fn fail (message: &str) -> AppErr {
+    AppErr::new("Fail", message)
+}
+
 impl Display for AppErr {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         write!(f, "{}", self.description())
