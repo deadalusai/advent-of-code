@@ -1,0 +1,8 @@
+[package]
+name = "day4"
+version = "0.1.0"
+authors = ["Benjamin Fox <deadalus.ai@gmail.com>"]
+
+[dependencies]
+util = { path = "../util" }
+regex = "1.1.0"
