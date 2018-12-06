@@ -5,3 +5,4 @@ authors = ["Benjamin Fox <deadalus.ai@gmail.com>"]
 
 [dependencies]
 util = { path = "../util" }
+itertools = "0.7.11"

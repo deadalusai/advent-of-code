@@ -1,6 +1,8 @@
 extern crate util;
+extern crate itertools;
 
 use util::{ read_input };
+use itertools::{ Itertools };
 
 fn main() {
 
@@ -22,10 +24,8 @@ fn main() {
             .collect::<Vec<_>>();
 
     // Find bounds
-    let min_x = input.iter().map(|input| input.coords.0).min().unwrap();
-    let max_x = input.iter().map(|input| input.coords.0).max().unwrap();
-    let min_y = input.iter().map(|input| input.coords.1).min().unwrap();
-    let max_y = input.iter().map(|input| input.coords.1).max().unwrap();
+    let (min_x, max_x) = input.iter().map(|input| input.coords.0).minmax().into_option().unwrap();
+    let (min_y, max_y) = input.iter().map(|input| input.coords.1).minmax().into_option().unwrap();
 
     fn manhattan_distance((x1, y1): (i32, i32), (x2, y2): (i32, i32)) -> i32 {
         (x1 - x2).abs() + (y1 - y2).abs()
@@ -87,8 +87,9 @@ fn main() {
     // For each element in the bounds, find the nearest input by smallest manhattan distance
     for x in min_x..max_x {
         for y in min_y..max_y {
+            let coords = (x, y);
             // For each input, find the manhattan distance to this point
-            let distances = input.iter().map(|input| (input.id, manhattan_distance((x, y), input.coords)));
+            let distances = input.iter().map(|input| (input.id, manhattan_distance(coords, input.coords)));
             // Scan each distance to find a *single* shortest one
             enum Ids { Single(Id), Multiple }
             let mut state = (Ids::Multiple, i32::max_value());
