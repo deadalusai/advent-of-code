@@ -1,6 +1,9 @@
 extern crate util;
-extern crate itertools;
 extern crate regex;
+extern crate slab;
+
+mod list;
+use list::{ List, Pointer };
 
 use util::{ read_input };
 
@@ -91,33 +94,40 @@ fn main() {
     }
 }
 
+fn counter_clockwise<T>(list: &List<T>, ptr: Pointer, count: usize) -> Pointer {
+    let mut ptr = ptr;
+    for _ in 0..count {
+        let prev = list[ptr].prev;
+        ptr = if prev.is_null() { list.tail } else { prev };
+    }
+    ptr
+}
+
+fn clockwise<T>(list: &List<T>, ptr: Pointer, count: usize) -> Pointer {
+    let mut ptr = ptr;
+    for _ in 0..count {
+        let next = list[ptr].next;
+        ptr = if next.is_null() { list.head } else { next };
+    }
+    ptr
+}
+
 fn run_game(player_count: u32, max_marble_value: u32) -> u32 {
 
-    let mut current_marble_index = 0_usize;
-    let mut marbles = vec![0];
-    
-    macro_rules! get_index {
-        ($i:expr, $delta:expr) => {
-            match ($i as isize + $delta as isize, marbles.len() as isize) {
-                (i, len) if i >= len => i - len,
-                (i, len) if i <  0   => len + i,
-                (i, _)               => i
-            } as usize
-        };
-    }
+    let mut marbles = List::new();
+    let mut current_marble_ptr = marbles.push_back(0);
 
     let mut scores = vec![0; player_count as usize];
     let mut player = 0;
     let mut marble_value = 1;
+
     loop {
-        // Holy worst-case usage of remove and insert, Batman
-        // Edit: yeah this bit hard. Need to use a linked list
         if marble_value % 23 == 0 {
             // Update circle
             // - Remove the marble seven indexes counter-clockwise
-            let remove_at_index = get_index!(current_marble_index, -7);
-            let removed_value = marbles.remove(remove_at_index);
-            current_marble_index = remove_at_index;
+            let to_remove = counter_clockwise(&marbles, current_marble_ptr, 7);
+            current_marble_ptr = marbles[to_remove].next;
+            let removed_value = marbles.remove(to_remove);
             // Update scores
             // - Add the marble_value to the player's score
             // - Add the value of the marble seven spaces counterclockwise of the current marble
@@ -126,9 +136,8 @@ fn run_game(player_count: u32, max_marble_value: u32) -> u32 {
         else {
             // Normal rules
             // - Insert the next_marble_value two positions clockwise of the current marble
-            let insert_at_index = get_index!(current_marble_index, 2);
-            marbles.insert(insert_at_index, marble_value);
-            current_marble_index = insert_at_index;
+            let next = clockwise(&marbles, current_marble_ptr, 1);
+            current_marble_ptr = marbles.insert_after(next, marble_value);
         }
 
         // End of game        
