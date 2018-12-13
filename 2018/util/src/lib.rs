@@ -17,7 +17,7 @@ pub fn read_input <P> (input_path: P) -> Result<Vec<String>, IoError>
         if input.read_line(&mut line)? == 0 {
             break;
         }
-        result.push(line.trim().to_string());
+        result.push(line.trim_end().to_string());
         line.clear();
     }
     Ok(result)
