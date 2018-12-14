@@ -158,7 +158,14 @@ fn main() {
         use Tile::*;
         use Turn::*;
         use Direction::*;
-        // Determine cart movement
+        // Update cart position
+        cart.pos = match (cart.direction, cart.pos) {
+            (Up,    (x, y)) => (x, y - 1),
+            (Down,  (x, y)) => (x, y + 1),
+            (Left,  (x, y)) => (x - 1, y),
+            (Right, (x, y)) => (x + 1, y),
+        };
+        // Determine new cart direction
         let current_tile = grid.get(cart.pos);
         let move_direction = match (cart.direction, current_tile) {
             (_,         Space)        => panic!("Derailed! {:?}", cart.pos),
@@ -170,10 +177,8 @@ fn main() {
             (Down,      Forwardslash) => Left,
             (Left,      Forwardslash) => Down,
             (Right,     Forwardslash) => Up,
-            (Up,        Vertical)     => Up,
-            (Down,      Vertical)     => Down,
-            (Left,      Horizontal)   => Left,
-            (Right,     Horizontal)   => Right,
+            (direction, Vertical)     => direction,
+            (direction, Horizontal)   => direction,
             (direction, Cross) => {
                 match (direction, cart.next_turn) {
                     (Up,    GoLeft)     => Left,
@@ -191,12 +196,6 @@ fn main() {
         };
         // Update cart
         cart.direction = move_direction;
-        cart.pos = match (cart.direction, cart.pos) {
-            (Up,    (x, y)) => (x, y - 1),
-            (Down,  (x, y)) => (x, y + 1),
-            (Left,  (x, y)) => (x - 1, y),
-            (Right, (x, y)) => (x + 1, y),
-        };
         if let Cross = current_tile {
             cart.next_turn = match cart.next_turn {
                 GoLeft     => GoStraight,
