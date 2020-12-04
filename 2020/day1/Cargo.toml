@@ -1,0 +1,8 @@
+[package]
+name = "day1"
+version = "0.1.0"
+authors = ["Benjamin Fox <deadalus.ai@gmail.com>"]
+
+[dependencies]
+util = { path = "../util" }
+itertools = "0.9.0"
