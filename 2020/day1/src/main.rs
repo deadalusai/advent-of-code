@@ -39,17 +39,40 @@ fn main() -> Result<(), AppErr> {
             .collect::<Result<Vec<i32>, AppErr>>()?;
 
     // permute inputs and find the two which sum to 2020
-    let x = input.into_iter()
+    let result = input.iter()
         .permutations(2)
-        .map(|v| (v[0], v[1]))
+        .map(|v| (*v[0], *v[1]))
         .find(|(a, b)| a + b == 2020);
     
-    if let Some((a, b)) = x {
-        println!("{} * {} == {}", a, b, a * b);
+    if let Some((a, b)) = result {
+        println!("Part 1: {} * {} == {}", a, b, a * b);
     }
     else {
-        println!("No match found!");
+        println!("Part 1: No items which sum to 2020 found!");
     }
+
+    /*
+    --- Part Two ---
+    Find three numbers in your expense report that meet the same criteria.
+    
+    Using the above example again, the three entries that sum to 2020 are 979, 366, and 675. Multiplying them together produces the answer, 241861950.
+
+    In your expense report, what is the product of the three entries that sum to 2020?
+    */
+
+    // permute inputs and find the three which sum to 2020
+    let result = input.iter()
+        .permutations(3)
+        .map(|v| (*v[0], *v[1], *v[2]))
+        .find(|(a, b, c)| a + b + c == 2020);
+    
+    if let Some((a, b, c)) = result {
+        println!("Part 2: {} * {} * {} == {}", a, b, c, a * b * c);
+    }
+    else {
+        println!("Part 2: No items which sum to 2020 found!");
+    }
+    
 
     Ok(())
 }
