@@ -34,18 +34,9 @@ fn main() -> Result<(), AppErr> {
     Treat cid as optional. In your batch file, how many passports are valid?
     */
 
-    struct Passport<'a> {
-        byr: Option<&'a str>,
-        iyr: Option<&'a str>,
-        eyr: Option<&'a str>,
-        hgt: Option<&'a str>,
-        hcl: Option<&'a str>,
-        ecl: Option<&'a str>,
-        pid: Option<&'a str>,
-        cid: Option<&'a str>,
-    }
+    type PassportData<'a> = HashMap<&'a str, &'a str>;
 
-    fn try_read_passport<'a>(input: &mut dyn Iterator<Item=&'a String>) -> Result<Option<Passport<'a>>, AppErr> {
+    fn try_read_passport<'a>(input: &mut dyn Iterator<Item=&'a str>) -> Result<Option<PassportData<'a>>, AppErr> {
         let hash =  input
             .take_while(|line| line.trim().len() > 0)
             .flat_map(|line| line.split(" "))
@@ -61,42 +52,109 @@ fn main() -> Result<(), AppErr> {
             return Ok(None);
         }
 
-        let passport = Passport {
-            byr: hash.get("byr").copied(),
-            iyr: hash.get("iyr").copied(),
-            eyr: hash.get("eyr").copied(),
-            hgt: hash.get("hgt").copied(),
-            hcl: hash.get("hcl").copied(),
-            ecl: hash.get("ecl").copied(),
-            pid: hash.get("pid").copied(),
-            cid: hash.get("cid").copied(),
-        };
-
-        Ok(Some(passport))
-    }
-
-    fn is_passport_valid(passport: &Passport) -> bool {
-        // NOTE: cid is optional
-        passport.byr.is_some() &&
-            passport.iyr.is_some() &&
-            passport.eyr.is_some() &&
-            passport.hgt.is_some() &&
-            passport.hcl.is_some() &&
-            passport.ecl.is_some() &&
-            passport.pid.is_some()
+        Ok(Some(hash))
     }
 
     let input = read_input("input.txt")?;
-    let mut input_reader = input.iter();
-    
-    let mut valid_count = 0;
+    let mut input_reader = input.iter().map(|s| s.as_str());
+    let mut passports = Vec::new();
     while let Some(passport) = try_read_passport(&mut input_reader)? {
-        if is_passport_valid(&passport) {
-            valid_count += 1;
-        }
+        passports.push(passport);
     }
 
-    println!("Part 1: {} valid passports", valid_count);
+    fn is_passport_valid_part_1(passport: &PassportData) -> bool {
+        // NOTE: cid is optional
+        passport.get("byr").is_some() &&
+        passport.get("iyr").is_some() &&
+        passport.get("eyr").is_some() &&
+        passport.get("hgt").is_some() &&
+        passport.get("hcl").is_some() &&
+        passport.get("ecl").is_some() &&
+        passport.get("pid").is_some()
+    }
+
+    let valid_count_part_1 = passports.iter().filter(|p| is_passport_valid_part_1(p)).count();
+
+    println!("Part 1: {} valid passports", valid_count_part_1);
+
+    /*
+    --- Part Two ---
+    You can continue to ignore the cid field, but each other field has strict
+    rules about what values are valid for automatic validation:
+
+    byr (Birth Year) - four digits; at least 1920 and at most 2002.
+    iyr (Issue Year) - four digits; at least 2010 and at most 2020.
+    eyr (Expiration Year) - four digits; at least 2020 and at most 2030.
+    hgt (Height) - a number followed by either cm or in:
+        If cm, the number must be at least 150 and at most 193.
+        If in, the number must be at least 59 and at most 76.
+    hcl (Hair Color) - a # followed by exactly six characters 0-9 or a-f.
+    ecl (Eye Color) - exactly one of: amb blu brn gry grn hzl oth.
+    pid (Passport ID) - a nine-digit number, including leading zeroes.
+    cid (Country ID) - ignored, missing or not.
+
+    */
+
+    fn is_passport_valid_part_2(passport: &PassportData) -> bool {
+        fn validate_year(year: &str, min: i32, max: i32) -> bool {
+            year.len() == 4 &&
+            year.parse::<i32>()
+                .map(|year| year >= min && year <= max)
+                .unwrap_or(false)
+        }
+        fn validate_height(height: &str) -> bool {
+            enum Measure { Cm, In };
+            struct Height(u32, Measure);
+            fn try_parse_height(s: &str) -> Result<Height, AppErr> {
+                let unit = match s {
+                    u if u.ends_with("cm") => Ok(Measure::Cm),
+                    u if u.ends_with("in") => Ok(Measure::In),
+                    u => Err(AppErr::from_debug("invalid measure", &u)),
+                }?;
+                let value = s[..s.len() - 2].parse::<u32>()?;
+                Ok(Height(value, unit))
+            }
+            try_parse_height(height)
+                .map(|h| match h {
+                    Height(v, Measure::Cm) => v >= 150 && v <= 193,
+                    Height(v, Measure::In) => v >= 59  && v <= 76,
+                })
+                .unwrap_or(false)
+        }
+        fn validate_hair_color(color: &str) -> bool {
+            color.starts_with("#") &&
+            match &color[1..] {
+                hex =>
+                    hex.len() == 6 &&
+                    hex.chars().all(|c| c.is_ascii_hexdigit())
+            }
+        }
+        fn validate_eye_color(color: &str) -> bool {
+            match color {
+                "amb" | "blu" | "brn" | "gry" | "grn" | "hzl" | "oth" => true,
+                _ => false,
+            }
+        }
+        fn validate_passport_id(pid: &str) -> bool {
+            pid.len() == 9 &&
+            pid.parse::<i32>().is_ok()
+        }
+
+        let byr = passport.get("byr").filter(|s| validate_year(s, 1920, 2002));
+        let iyr = passport.get("iyr").filter(|s| validate_year(s, 2010, 2020));
+        let eyr = passport.get("eyr").filter(|s| validate_year(s, 2020, 2030));
+        let hgt = passport.get("hgt").filter(|s| validate_height(s));
+        let hcl = passport.get("hcl").filter(|s| validate_hair_color(s));
+        let ecl = passport.get("ecl").filter(|s| validate_eye_color(s));
+        let pid = passport.get("pid").filter(|s| validate_passport_id(s));
+        // NOTE: cid is optional
+        
+        byr.and(iyr).and(eyr).and(hgt).and(hcl).and(ecl).and(pid).is_some()
+    }
+
+    let valid_count_part_2 = passports.iter().filter(|p| is_passport_valid_part_2(p)).count();
+
+    println!("Part 2: {} valid passports", valid_count_part_2);
 
     Ok(())
 }
