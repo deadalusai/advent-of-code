@@ -36,28 +36,63 @@ fn main() -> Result<(), AppErr> {
                 }))
             .collect::<Result<HashMap<_, _>, AppErr>>()?;
 
-    let (x_max, y_max) = *input.keys().max().expect("zero-sized grid");
-    let (mut x_actual, mut y_actual) = (0, 0);
-    let mut tree_count = 0;
+    fn count_trees_on_slope(input: &HashMap<(usize, usize), Pos>, slope: (usize, usize)) -> u32 {
+        let (x_max, y_max) = *input.keys().max().expect("zero-sized grid");
+        let (x_delta, y_delta) = slope;
 
-    loop {
-        // count the trees
-        let x = x_actual % (x_max + 1);
-        let y = y_actual;
-        let pos = input.get(&(x, y)).unwrap_or(&Pos::Gap);
-        if pos == &Pos::Tree {
-            tree_count += 1;
+        let (mut x_actual, mut y_actual) = (0, 0);
+        let mut tree_count = 0;
+        loop {
+            // count the tree
+            let x = x_actual % (x_max + 1);
+            let y = y_actual;
+            if Pos::Tree == *input.get(&(x, y)).unwrap_or(&Pos::Gap) {
+                tree_count += 1;
+            }
+            // move
+            x_actual += x_delta;
+            y_actual += y_delta;
+            // check for end of slope
+            if y_actual > y_max {
+                break;
+            }
         }
-        // move right 3, down 1
-        x_actual += 3;
-        y_actual += 1;
-        // check for end of slope
-        if y_actual > y_max {
-            break;
-        }
+
+        tree_count
     }
 
-    println!("Part 1: {} trees", tree_count);
+    let part_1_result = count_trees_on_slope(&input, (3, 1));
+
+    println!("Part 1: {} trees", part_1_result);
+
+    /*
+    --- Part Two ---
+    Time to check the rest of the slopes - you need to minimize the probability of a sudden
+    arboreal stop, after all.
+
+    Determine the number of trees you would encounter if, for each of the following slopes,
+    you start at the top-left corner and traverse the map all the way to the bottom:
+
+        Right 1, down 1.
+        Right 3, down 1. (This is the slope you already checked.)
+        Right 5, down 1.
+        Right 7, down 1.
+        Right 1, down 2.
+
+    In the above example, these slopes would find 2, 7, 3, 4, and 2 tree(s) respectively;
+    multiplied together, these produce the answer 336.
+
+    What do you get if you multiply together the number of trees encountered on each of the listed slopes?
+    */
+
+    let part_2_result =
+        count_trees_on_slope(&input, (1, 1)) *
+        count_trees_on_slope(&input, (3, 1)) *
+        count_trees_on_slope(&input, (5, 1)) *
+        count_trees_on_slope(&input, (7, 1)) *
+        count_trees_on_slope(&input, (1, 2));
+
+    println!("Part 2: {} trees", part_2_result);
 
     Ok(())
 }
