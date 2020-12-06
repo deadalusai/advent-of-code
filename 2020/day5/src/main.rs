@@ -101,17 +101,53 @@ fn main() -> Result<(), AppErr> {
     let seat_locations =
         read_input("input.txt")?
             .iter()
-            .map(|line| try_parse_seat_location_desc(line))
+            .map(|line| {
+                let desc = try_parse_seat_location_desc(line)?;
+                Ok(calculate_seat_location(&desc))
+            })
             .collect::<Result<Vec<_>, AppErr>>()?;
 
 
     let highest_seat_id = seat_locations.iter()
-        .map(|loc| calculate_seat_location(&loc))
         .map(|loc| loc.id)
         .max();
 
-    
     println!("Part 1: highest seat id = {:?}", highest_seat_id);
+
+    /*
+    --- Part Two ---
+
+    Ding! The "fasten seat belt" signs have turned on.
+    Time to find your seat.
+
+    It's a completely full flight, so your seat should be the only missing
+    boarding pass in your list. However, there's a catch: some of the seats
+    at the very front and back of the plane don't exist on this aircraft,
+    so they'll be missing from your list as well.
+
+    Your seat wasn't at the very front or back, though; the seats
+    with IDs +1 and -1 from yours will be in your list.
+
+    What is the ID of your seat?
+    */
+
+    // Sort the collection by ID and scan for non-contiguous IDs to identify the empty seat.
+    let mut seat_locations = seat_locations;
+    seat_locations.sort_by_key(|loc| loc.id);
+
+    let boundary_seats =
+            Iterator::zip(
+                seat_locations.iter(),
+                seat_locations.iter().skip(1)
+            )
+            .find(|(a, b)| a.id != (b.id - 1));
+
+    if let Some((a, b)) = boundary_seats {
+        println!("Part 2: found a gap in the IDs at {:?}", (a.id, b.id));
+    }
+    else {
+        println!("Part 2: no gap found");
+    }
 
     Ok(())
 }
