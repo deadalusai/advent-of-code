@@ -27,11 +27,11 @@ fn main() -> Result<(), AppErr> {
     */
 
     #[derive(Debug, PartialEq, Eq)]
-    enum PartitionDesc { Upper, Lower }
+    enum Partition { Upper, Lower }
     #[derive(Debug)]
     struct SeatLocationDesc {
-        row: [PartitionDesc; 7],
-        col: [PartitionDesc; 3],
+        row: [Partition; 7],
+        col: [Partition; 3],
     }
     #[derive(Debug)]
     struct SeatLocation {
@@ -41,61 +41,62 @@ fn main() -> Result<(), AppErr> {
     }
 
     fn try_parse_seat_location_desc(s: &str) -> Result<SeatLocationDesc, AppErr> {
-        fn parse_rowpar(c: char) -> Result<PartitionDesc, AppErr> {
+        fn parse_rowpar(c: char) -> Result<Partition, AppErr> {
             match c {
-                'F' => Ok(PartitionDesc::Lower),
-                'B' => Ok(PartitionDesc::Upper),
+                'F' => Ok(Partition::Lower),
+                'B' => Ok(Partition::Upper),
                  x  => Err(AppErr::from_debug("invalid row partition", &x)),
             }
         }
-        fn parse_colpar(c: char) -> Result<PartitionDesc, AppErr> {
+        fn parse_colpar(c: char) -> Result<Partition, AppErr> {
             match c {
-                'L' => Ok(PartitionDesc::Lower),
-                'R' => Ok(PartitionDesc::Upper),
+                'L' => Ok(Partition::Lower),
+                'R' => Ok(Partition::Upper),
                  x  => Err(AppErr::from_debug("invalid col partition", &x)),
             }
         }
+
         let mut chars = s.chars();
         Ok(SeatLocationDesc {
             row: [
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
-                parse_rowpar(chars.take_next()?)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_rowpar)?,
             ],
             col: [
-                parse_colpar(chars.take_next()?)?,
-                parse_colpar(chars.take_next()?)?,
-                parse_colpar(chars.take_last()?)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_colpar)?,
+                chars.take_next().map_err(AppErr::from).and_then(parse_colpar)?,
+                chars.take_last().map_err(AppErr::from).and_then(parse_colpar)?,
             ],
         })
     }
 
     fn calculate_seat_location(loc: &SeatLocationDesc) -> SeatLocation {
-        fn partition(min: u32, max: u32, take_upper: bool) -> (u32, u32) {
+        fn partition(min: u32, max: u32, partition: &Partition) -> (u32, u32) {
             let range = max - min;
             let mid = min + (range / 2);
-            if take_upper { (mid + 1, max) } else { (min, mid) }
+            match *partition {
+                Partition::Upper => (mid + 1, max),
+                Partition::Lower => (min, mid),
+            }
         }
-        fn reduce(mut min: u32, mut max: u32, path: &[PartitionDesc]) -> u32 {
+        fn binary_reduce(mut min: u32, mut max: u32, path: &[Partition]) -> u32 {
             for part in path {
-                let (new_min, new_max) = partition(min, max, *part == PartitionDesc::Upper);
+                let (new_min, new_max) = partition(min, max, part);
                 min = new_min;
                 max = new_max;
             }
             assert_eq!(min, max);
             min
         }
-        let row = reduce(0, 127, &loc.row);
-        let col = reduce(0, 7, &loc.col);
-        SeatLocation {
-            row,
-            col,
-            id: (row * 8) + col
-        }
+        let row = binary_reduce(0, 127, &loc.row);
+        let col = binary_reduce(0, 7, &loc.col);
+        let id = (row * 8) + col; 
+        SeatLocation { row, col, id }
     }
 
     let seat_locations =
