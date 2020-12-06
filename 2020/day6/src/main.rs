@@ -53,20 +53,57 @@ fn main() -> Result<(), AppErr> {
         answer_groups.push(group);
     }
 
-    let group_answer_counts_sum =
+    struct AnswerMap {
+        persons: u32,
+        answer_counts: HashMap<char, u32>,
+    }
+
+    let answer_counts =
         answer_groups.iter()
             .map(|g| {
-                let mut hash = HashMap::new();
+                let mut answer_counts = HashMap::new();
                 for answers in &g.answers {
                     for key in answers {
-                        *hash.entry(key).or_insert(0) += 1;
+                        *answer_counts.entry(*key).or_insert(0) += 1;
                     }
                 }
-                hash.keys().len() as u32
+                AnswerMap {
+                    persons: g.answers.len() as u32,
+                    answer_counts,
+                }
+            })
+            .collect::<Vec<_>>();
+
+    let group_answer_counts_sum =
+        answer_counts.iter()
+            .map(|amap| {
+                let questions_answered = amap.answer_counts.keys().len() as u32;
+                questions_answered
             })
             .sum::<u32>();
 
     println!("Part 1: sum of questions answered for all groups: {}", group_answer_counts_sum);
+
+    /*
+    --- Part 2 ---
+
+    You don't need to identify the questions to which anyone answered "yes";
+    you need to identify the questions to which everyone answered "yes"!
+    */
+
+    
+    let group_answer_counts_sum =
+        answer_counts.iter()
+            .map(|amap| {
+                let questions_answered_by_everyone = amap.answer_counts.values()
+                    .filter(|&&value| value == amap.persons)
+                    .count() as u32;
+                questions_answered_by_everyone
+            })
+            .sum::<u32>();
+
+
+    println!("Part 2: sum of questions answered by all people in all groups: {}", group_answer_counts_sum);
 
     Ok(())
 }
