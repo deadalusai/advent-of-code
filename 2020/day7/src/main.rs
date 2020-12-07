@@ -3,6 +3,7 @@ extern crate util;
 use std::collections::{ HashSet };
 
 use util::{ read_input };
+use util::parse::{ parse_i32, parse_alpha, parse_token, parse_end, ParseResult, ParseResultEx };
 use util::error::{ AppErr };
 
 fn main() -> Result<(), AppErr> {
@@ -32,57 +33,11 @@ fn main() -> Result<(), AppErr> {
     // Could have done this with just string splits,
     // but it's more fun to write a parser combinator right?
 
-    #[derive(Debug)]
-    enum ParseErr {
-        NoInput,
-        Unexpected(char),
-        Expected(String),
-        InvalidNumber(String),
-    }
-
-    type ParseResult<'a, T> = Result<(&'a str, T), ParseErr>;
-
-    fn consume(s: &str) -> ParseResult<&str> {
-        let first = s.chars().next()
-            .ok_or(ParseErr::NoInput)?;
-        // Special characters
-        if first == '.' || first == ',' {
-            let (a, b) = s.split_at(1);
-            return Ok((b.trim(), a.trim()));
-        }
-        // Tokens are made up of characters of the same type as the first character.
-        let allowed = match first {
-            c if c.is_alphabetic() => 'a'..='z',
-            c if c.is_numeric() => '0'..='9',
-            c => return Err(ParseErr::Unexpected(c)),
-        };
-        let (last, _) = s.char_indices()
-            .take_while(|(_, c)| allowed.contains(c))
-            .last()
-            .unwrap();
-        let (a, b) = s.split_at(last + 1);
-        Ok((b.trim(), a.trim()))
-    }
-
-    fn parse_i32(input: &str) -> ParseResult<i32> {
-        let (input, num) = consume(input)?;
-        let num = num.parse::<i32>().map_err(|_| ParseErr::InvalidNumber(num.to_string()))?;
-        Ok((input, num))
-    }
-
-    fn parse_token<'a>(input: &'a str, token: &str) -> ParseResult<'a, &'a str> {
-        let (input, actual) = consume(input)?;
-        if actual != token {
-            return Err(ParseErr::Expected(token.to_string()));
-        }
-        Ok((input, actual))
-    }
-
     // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
 
     fn parse_name(input: &str) -> ParseResult<String> {
-        let (input, word1) = consume(input)?;
-        let (input, word2) = consume(input)?;
+        let (input, word1) = parse_alpha(input)?;
+        let (input, word2) = parse_alpha(input)?;
         Ok((input, format!("{} {}", word1, word2)))
     }
 
@@ -102,10 +57,10 @@ fn main() -> Result<(), AppErr> {
             Ok((input, Some((name, num))))
         }
 
-        no_bags(input).or_else(|_| some_bags(input))
+        no_bags(input).or_try(|| some_bags(input))
     }
 
-    fn parse_bag(input: &str) -> Result<BagRule, ParseErr> {
+    fn parse_bag(input: &str) -> ParseResult<BagRule> {
         let (input, name) = parse_name(input)?;
         let (input, _) = parse_token(input, "bags")?;
         let (input, _) = parse_token(input, "contain")?;
@@ -117,20 +72,21 @@ fn main() -> Result<(), AppErr> {
                 rules.push(rule);
             }
             // Continue scanning for more rules?
-            let (next, term) = parse_token(next, ",").or_else(|_| parse_token(next, "."))?;
+            let (next, term) = parse_token(next, ",").or_try(|| parse_token(next, "."))?;
             input = next;
             if term == "." {
                 break;
             }
         }
-        assert_eq!(input, "");
-        Ok(BagRule { name, rules })
+        let (input, _) = parse_end(input)?;
+        Ok((input, BagRule { name, rules }))
     }
 
     let bags = read_input("input.txt")?
         .iter()
         .map(|line| {
             parse_bag(line)
+                .map(|r| r.1)
                 .map_err(|e| AppErr::from_debug("parse error", &e))
         })
         .collect::<Result<Vec<_>, _>>()?;

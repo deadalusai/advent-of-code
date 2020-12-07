@@ -1,4 +1,5 @@
 pub mod error;
+pub mod parse;
 
 // Utility for reading input files
 
