@@ -20,90 +20,96 @@ fn main() -> Result<(), AppErr> {
     #[derive(Debug)]
     struct BagRule {
         name: BagName,
-        rules: Vec<(BagName, u32)>,
+        rules: Vec<(BagName, i32)>,
     }
 
     // Could have done this with just string splits,
     // but it's more fun to write a parser combinator right?
 
     #[derive(Debug)]
-    enum ConsumeErr {
-        NothingConsumed,
-        ExpectedToken,
-        InvalidNumber,
+    enum ParseErr {
+        NoInput,
+        Unexpected(char),
+        Expected(String),
+        InvalidNumber(String),
     }
 
-    type ConsumeResult<'a, T> = Result<(&'a str, T), ConsumeErr>;
+    type ParseResult<'a, T> = Result<(&'a str, T), ParseErr>;
 
-    fn consume<'a>(s: &'a str, mut m: impl FnMut(&char) -> bool) -> ConsumeResult<&'a str> {
-        let last = s.char_indices().take_while(|(_, c)| m(c)).last();
-        match last {
-            None => Err(ConsumeErr::NothingConsumed),
-            Some((i, _)) => {
-                let (a, b) = s.split_at(i + 1);
-                // NOTE: always swallow whitespace
-                Ok((b.trim(), a.trim()))
-            },
+    fn consume<'a>(s: &'a str) -> ParseResult<&'a str> {
+        let first = s.chars().next()
+            .ok_or(ParseErr::NoInput)?;
+        // Special characters
+        if first == '.' || first == ',' {
+            let (a, b) = s.split_at(1);
+            return Ok((b.trim(), a.trim()));
         }
+        // Tokens are made up of characters of the same type as the first character.
+        let allowed = match first {
+            c if c.is_alphabetic() => 'a'..='z',
+            c if c.is_numeric() => '0'..='9',
+            c => return Err(ParseErr::Unexpected(c)),
+        };
+        let (last, _) = s.char_indices()
+            .take_while(|(_, c)| allowed.contains(c))
+            .last()
+            .unwrap();
+        let (a, b) = s.split_at(last + 1);
+        Ok((b.trim(), a.trim()))
     }
 
-    fn consume_term(input: &str) -> ConsumeResult<&str> {
-        consume(input, |c| *c == ',' || *c == '.')
+    fn parse_i32(input: &str) -> ParseResult<i32> {
+        let (input, num) = consume(input)?;
+        let num = num.parse::<i32>().map_err(|_| ParseErr::InvalidNumber(num.to_string()))?;
+        Ok((input, num))
     }
 
-    fn consume_numeric(input: &str) -> ConsumeResult<&str> {
-        consume(input, |c| c.is_numeric())
-    }
-
-    fn consume_token(input: &str) -> ConsumeResult<&str> {
-        consume(input, |c| c.is_alphabetic())
-    }
-
-    fn consume_exact<'a>(input: &'a str, tokens: &[&str]) -> ConsumeResult<'a, ()> {
-        let mut input = input;
-        for t in tokens.iter() {
-            let (input_, token) = consume_token(input)?;
-            if *t != token {
-                return Err(ConsumeErr::ExpectedToken);
-            }
-            input = input_;
+    fn parse_token<'a>(input: &'a str, token: &str) -> ParseResult<'a, &'a str> {
+        let (input, actual) = consume(input)?;
+        if actual != token {
+            return Err(ParseErr::Expected(token.to_string()));
         }
-        Ok((input, ()))
+        Ok((input, actual))
     }
 
-    fn consume_name(input: &str) -> ConsumeResult<String> {
-        let (input, word1) = consume_token(input)?;
-        let (input, word2) = consume_token(input)?;
+    fn parse_name(input: &str) -> ParseResult<String> {
+        let (input, word1) = consume(input)?;
+        let (input, word2) = consume(input)?;
         Ok((input, format!("{} {}", word1, word2)))
     }
 
-    // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags.
+    // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
 
-    fn consume_rule<'a>(input: &'a str) -> ConsumeResult<Option<(String, u32)>> {
-        if let Ok((input, num)) = consume_numeric(input) {
-            let num = num.parse::<u32>().map_err(|_| ConsumeErr::InvalidNumber)?;
-            let (input, name) = consume_name(input)?;
-            let (input, _) = consume_exact(input, &[if num == 1 { "bag" } else { "bags" }])?;
-            let (input, _) = consume_term(input)?;
-            return Ok((input, Some((name, num))));
-        }
-        else {
-            let (input, _) = consume_exact(input, &["no", "other", "bags"])?;
-            let (input, _) = consume_term(input)?;
-            assert_eq!(input, "");
+    fn parse_rule<'a>(input: &'a str) -> ParseResult<Option<(String, i32)>> {
+        // Attempt to consume the "no rules" rule.
+        if let Ok((input, _)) = parse_token(input, "no") {
+            let (input, _) = parse_token(input, "other")?;
+            let (input, _) = parse_token(input, "bags")?;
             return Ok((input, None));
         }
+
+        let (input, num) = parse_i32(input)?;
+        let (input, name) = parse_name(input)?;
+        let (input, _) = parse_token(input, if num == 1 { "bag" } else { "bags" })?;
+        Ok((input, Some((name, num))))
     }
 
-    fn consume_bag<'a>(input: &'a str) -> Result<BagRule, ConsumeErr> {
-        let (input, name) = consume_name(input)?;
-        let (input, _) = consume_exact(input, &["bags", "contain"])?;
+    fn parse_bag<'a>(input: &'a str) -> Result<BagRule, ParseErr> {
+        let (input, name) = parse_name(input)?;
+        let (input, _) = parse_token(input, "bags")?;
+        let (input, _) = parse_token(input, "contain")?;
         let mut rules = Vec::new();
         let mut input = input;
-        while let Ok((input_, rule)) = consume_rule(input) {
-            input = input_;
+        loop {
+            let (next, rule) = parse_rule(input)?;
             if let Some(rule) = rule {
                 rules.push(rule);
+            }
+            // Continue scanning for more rules?
+            let (next, term) = parse_token(next, ",").or_else(|_| parse_token(next, "."))?;
+            input = next;
+            if term == "." {
+                break;
             }
         }
         assert_eq!(input, "");
@@ -112,8 +118,11 @@ fn main() -> Result<(), AppErr> {
 
     let input = read_input("input.txt")?
         .iter()
-        .map(|line| consume_bag(line))
-        .collect::<Vec<_>>();
+        .map(|line| {
+            parse_bag(line)
+                .map_err(|e| AppErr::from_debug("parse error", &e))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     for bag in &input {
         println!("{:?}", bag);
