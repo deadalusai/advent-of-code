@@ -42,7 +42,7 @@ fn main() -> Result<(), AppErr> {
 
     type ParseResult<'a, T> = Result<(&'a str, T), ParseErr>;
 
-    fn consume<'a>(s: &'a str) -> ParseResult<&'a str> {
+    fn consume(s: &str) -> ParseResult<&str> {
         let first = s.chars().next()
             .ok_or(ParseErr::NoInput)?;
         // Special characters
@@ -78,28 +78,34 @@ fn main() -> Result<(), AppErr> {
         Ok((input, actual))
     }
 
+    // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
+
     fn parse_name(input: &str) -> ParseResult<String> {
         let (input, word1) = consume(input)?;
         let (input, word2) = consume(input)?;
         Ok((input, format!("{} {}", word1, word2)))
     }
 
-    // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
-
-    fn parse_rule<'a>(input: &'a str) -> ParseResult<Option<(String, i32)>> {
-        // Attempt to consume the "no rules" rule.
-        if let Ok((input, _)) = parse_token(input, "no") {
+    fn parse_rule(input: &str) -> ParseResult<Option<(String, i32)>> {
+        
+        fn no_bags(input: &str) -> ParseResult<Option<(String, i32)>> {
+            let (input, _) = parse_token(input, "no")?;
             let (input, _) = parse_token(input, "other")?;
             let (input, _) = parse_token(input, "bags")?;
-            return Ok((input, None));
+            Ok((input, None))
         }
-        let (input, num) = parse_i32(input)?;
-        let (input, name) = parse_name(input)?;
-        let (input, _) = parse_token(input, if num == 1 { "bag" } else { "bags" })?;
-        Ok((input, Some((name, num))))
+        
+        fn some_bags(input: &str) -> ParseResult<Option<(String, i32)>> {
+            let (input, num) = parse_i32(input)?;
+            let (input, name) = parse_name(input)?;
+            let (input, _) = parse_token(input, if num == 1 { "bag" } else { "bags" })?;
+            Ok((input, Some((name, num))))
+        }
+
+        no_bags(input).or_else(|_| some_bags(input))
     }
 
-    fn parse_bag<'a>(input: &'a str) -> Result<BagRule, ParseErr> {
+    fn parse_bag(input: &str) -> Result<BagRule, ParseErr> {
         let (input, name) = parse_name(input)?;
         let (input, _) = parse_token(input, "bags")?;
         let (input, _) = parse_token(input, "contain")?;
@@ -140,8 +146,41 @@ fn main() -> Result<(), AppErr> {
         count
     }
 
-    let mut seen = HashSet::new();
-    println!("Part 1: {} bags can hold the shiny gold bag", can_hold_count("shiny gold", &bags, &mut seen));
+    println!("Part 1: {} bags can hold the shiny gold bag", can_hold_count("shiny gold", &bags, &mut HashSet::new()));
+
+    /*
+    --- Part Two ---
+
+    Consider again your shiny gold bag and the rules from the above example:
+
+        faded blue bags contain 0 other bags.
+        dotted black bags contain 0 other bags.
+        vibrant plum bags contain 11 other bags: 5 faded blue bags and 6 dotted black bags.
+        dark olive bags contain 7 other bags: 3 faded blue bags and 4 dotted black bags.
+
+    So, a single shiny gold bag must contain 1 dark olive bag (and the 7 bags within it)
+    plus 2 vibrant plum bags (and the 11 bags within each of those):
+        1 + 1*7 + 2 + 2*11 = 32 bags!
+
+    Of course, the actual rules have a small chance of going several levels deeper than this example;
+    be sure to count all of the bags, even if the nesting becomes topologically impractical!
+
+    How many individual bags are required inside your single shiny gold bag?
+    */
+
+    let mut bags = bags;
+    bags.sort_by(|a, b| a.name.cmp(&b.name));
+
+    fn should_hold_count<'a>(bag_name: &'a str, bags: &'a [BagRule]) -> i32 {
+        let bag_index = bags.binary_search_by_key(&bag_name, |b| &b.name).unwrap();
+        bags[bag_index].rules.iter()
+            .map(|(bag_name, count)| {
+                (1 + should_hold_count(bag_name, bags)) * count
+            })
+            .sum::<i32>()
+    }
+
+    println!("Part 2: {} bags can be held by the shiny gold bag", should_hold_count("shiny gold", &bags));
 
     Ok(())
 }
