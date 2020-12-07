@@ -1,5 +1,7 @@
 extern crate util;
 
+use std::collections::{ HashSet };
+
 use util::{ read_input };
 use util::error::{ AppErr };
 
@@ -15,12 +17,16 @@ fn main() -> Result<(), AppErr> {
     
     */
 
-    type BagName = String;
-
     #[derive(Debug)]
     struct BagRule {
-        name: BagName,
-        rules: Vec<(BagName, i32)>,
+        name: String,
+        rules: Vec<(String, i32)>,
+    }
+
+    impl BagRule {
+        fn bag_can_hold(&self, name: &str) -> bool {
+            self.rules.iter().any(|r| r.0 == name)
+        }
     }
 
     // Could have done this with just string splits,
@@ -87,7 +93,6 @@ fn main() -> Result<(), AppErr> {
             let (input, _) = parse_token(input, "bags")?;
             return Ok((input, None));
         }
-
         let (input, num) = parse_i32(input)?;
         let (input, name) = parse_name(input)?;
         let (input, _) = parse_token(input, if num == 1 { "bag" } else { "bags" })?;
@@ -116,7 +121,7 @@ fn main() -> Result<(), AppErr> {
         Ok(BagRule { name, rules })
     }
 
-    let input = read_input("input.txt")?
+    let bags = read_input("input.txt")?
         .iter()
         .map(|line| {
             parse_bag(line)
@@ -124,9 +129,19 @@ fn main() -> Result<(), AppErr> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    for bag in &input {
-        println!("{:?}", bag);
+    fn can_hold_count<'a>(bag_name: &'a str, bags: &'a [BagRule], seen: &mut HashSet<&'a str>) -> u32 {
+        let mut count = 0;
+        for bag in bags {
+            if bag.bag_can_hold(bag_name) && seen.insert(&bag.name) {
+                count += 1;
+                count += can_hold_count(&bag.name, bags, seen);
+            }
+        }
+        count
     }
+
+    let mut seen = HashSet::new();
+    println!("Part 1: {} bags can hold the shiny gold bag", can_hold_count("shiny gold", &bags, &mut seen));
 
     Ok(())
 }
