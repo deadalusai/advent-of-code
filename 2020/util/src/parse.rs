@@ -78,20 +78,10 @@ impl ParseErr {
 }
 
 #[derive(Debug)]
-pub enum ParseToken<'a> {
-    Special(&'a str),
-    Alpha(&'a str),
-    Numeric(&'a str),
-}
-
-impl<'a> ParseToken<'a> {
-    fn raw(&self) -> &'a str {
-        match self {
-            ParseToken::Special(s) => s,
-            ParseToken::Alpha(s) => s,
-            ParseToken::Numeric(s) => s,
-        }
-    }
+pub enum TokenKind {
+    Special,
+    Alpha,
+    Numeric,
 }
 
 pub type ParseResult<'a, T> = Result<(&'a str, T), ParseErr>;
@@ -119,35 +109,34 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
 /// - a contiguous sequence of alpha characters
 /// - a contiguous sequence of numeric characters
 /// All whitespace is ignored.
-pub fn consume<'a>(s: &'a str) -> ParseResult<ParseToken<'a>> {
+pub fn consume<'a>(s: &'a str) -> ParseResult<(TokenKind, &'a str)> {
     let first = s.chars().next()
         .ok_or(ParseErr::end_of_input())?;
     // Special character tokens
     if first == '.' || first == ',' {
         let (a, b) = s.split_at(1);
-        return Ok((b.trim(), ParseToken::Numeric(a.trim())));
+        return Ok((b.trim(), (TokenKind::Numeric, a.trim())));
     }
     // Tokens are made up of characters of the same type as the first character.
-    let (allowed, is_alpha) = match first {
-        'a'..='z' => ('a'..='z', true),
-        '0'..='9' => ('0'..='9', false),
+    let (allowed, kind) = match first {
+        'a'..='z' => ('a'..='z', TokenKind::Alpha),
+        '0'..='9' => ('0'..='9', TokenKind::Numeric),
         c => return Err(ParseErr::unexpected_input(c)),
     };
-    let factory = if is_alpha { ParseToken::Alpha } else { ParseToken::Numeric };
     let (last, _) = s.char_indices()
         .take_while(|(_, c)| allowed.contains(c))
         .last()
         .unwrap();
     let (a, b) = s.split_at(last + 1);
-    Ok((b.trim(), factory(a.trim())))
+    Ok((b.trim(), (kind, a.trim())))
 }
 
 pub fn parse_i32(input: &str) -> ParseResult<i32> {
     let (input, token) = consume(input)?;
     let num = match token {
-        ParseToken::Numeric(num) => {
+        (TokenKind::Numeric, num) => {
             num.parse::<i32>()
-               .map_err(|_| ParseErr::expected_number())
+                .map_err(|_| ParseErr::expected_number())
         },
         _ => Err(ParseErr::expected_number()),
     }?;
@@ -157,17 +146,17 @@ pub fn parse_i32(input: &str) -> ParseResult<i32> {
 pub fn parse_alpha(input: &str) -> ParseResult<&str> {
     let (input, token) = consume(input)?;
     match token {
-        ParseToken::Alpha(alpha) => Ok((input, alpha)),
+        (TokenKind::Alpha, alpha) => Ok((input, alpha)),
         _ => Err(ParseErr::expected_alpha()),
     }
 }
 
 pub fn parse_token<'a>(input: &'a str, token: &str) -> ParseResult<'a, &'a str> {
-    let (input, actual) = consume(input)?;
-    if actual.raw() != token {
+    let (input, (_, actual)) = consume(input)?;
+    if actual != token {
         return Err(ParseErr::expected_token(token));
     }
-    Ok((input, actual.raw()))
+    Ok((input, actual))
 }
 
 pub fn parse_end(input: &str) -> ParseResult<()> {
