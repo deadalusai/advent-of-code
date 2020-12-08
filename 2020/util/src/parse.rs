@@ -1,27 +1,41 @@
 
 use std::fmt;
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct InputPos(usize);
+
 #[derive(PartialEq, Eq)]
 pub enum ParseErr {
-    EndOfInput,
-    UnexpectedInput(char),
-    ExpectedSingle(String),
-    ExpectedMultiple(Vec<String>),
+    EndOfInput       (InputPos),
+    UnexpectedInput  (InputPos, char),
+    ExpectedSingle   (InputPos, String),
+    ExpectedMultiple (InputPos, Vec<String>),
+}
+
+impl ParseErr {
+    fn pos(&self) -> InputPos {
+        match self { 
+            ParseErr::EndOfInput(pos) => *pos,
+            ParseErr::UnexpectedInput(pos, _) => *pos,
+            ParseErr::ExpectedSingle(pos, _) => *pos,
+            ParseErr::ExpectedMultiple(pos, _) => *pos,
+        }
+    }
 }
 
 impl fmt::Debug for ParseErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParseErr::UnexpectedInput(c) => {
-                write!(f, "unexpected character `{}`", c)?;
+            ParseErr::UnexpectedInput(pos, c) => {
+                write!(f, "unexpected character `{}` at offset {}", c, pos.0)?;
             },
-            ParseErr::EndOfInput => {
+            ParseErr::EndOfInput(_) => {
                 write!(f, "unexpected end of input")?;
             }
-            ParseErr::ExpectedSingle(exp) => {
-                write!(f, "expected {}", exp)?
+            ParseErr::ExpectedSingle(pos, exp) => {
+                write!(f, "expected {} at offset {}", exp, pos.0)?
             },
-            ParseErr::ExpectedMultiple(expected) => {
+            ParseErr::ExpectedMultiple(pos, expected) => {
                 write!(f, "expected ")?;
                 for (i, exp) in expected.iter().enumerate() {
                     if i == expected.len() - 1 {
@@ -32,6 +46,7 @@ impl fmt::Debug for ParseErr {
                     }
                     write!(f, "{}", exp)?
                 }
+                write!(f, " at offset {}", pos.0)?;
             },
         };
         Ok(())
@@ -39,53 +54,54 @@ impl fmt::Debug for ParseErr {
 }
 
 impl ParseErr {
-    pub fn end_of_input() -> ParseErr {
-        ParseErr::EndOfInput
+    pub fn end_of_input(pos: InputPos) -> ParseErr {
+        ParseErr::EndOfInput(pos)
     }
     
-    pub fn unexpected_input(c: char) -> ParseErr {
-        ParseErr::UnexpectedInput(c)
+    pub fn unexpected_input(pos: InputPos, c: char) -> ParseErr {
+        ParseErr::UnexpectedInput(pos, c)
     }
     
-    pub fn expected_alpha() -> ParseErr {
-        ParseErr::ExpectedSingle(format!("alpha"))
+    pub fn expected_alpha(pos: InputPos) -> ParseErr {
+        ParseErr::ExpectedSingle(pos, format!("alpha"))
     }
 
-    pub fn expected_number() -> ParseErr {
-        ParseErr::ExpectedSingle(format!("number"))
+    pub fn expected_number(pos: InputPos) -> ParseErr {
+        ParseErr::ExpectedSingle(pos, format!("number"))
     }
 
-    pub fn expected_token(token: &str) -> ParseErr {
-        ParseErr::ExpectedSingle(format!("`{}`", token))
+    pub fn expected_token(pos: InputPos, token: &str) -> ParseErr {
+        ParseErr::ExpectedSingle(pos, format!("`{}`", token))
     }
 
-    pub fn expected_end_of_input() -> ParseErr {
-        ParseErr::ExpectedSingle(format!("end of input"))
+    pub fn expected_end_of_input(pos: InputPos) -> ParseErr {
+        ParseErr::ExpectedSingle(pos, format!("end of input"))
     }
 
     pub fn combine(a: ParseErr, b: ParseErr) -> ParseErr {
-        let mut a = match a {
-            ParseErr::ExpectedSingle(a) => vec![a],
-            ParseErr::ExpectedMultiple(a) => a,
+        let pos = a.pos();
+        let mut errors = match a {
+            ParseErr::ExpectedSingle(_, a) => vec![a],
+            ParseErr::ExpectedMultiple(_, a) => a,
             e => return e,
         };
         match b {
-            ParseErr::ExpectedSingle(b) => a.push(b),
-            ParseErr::ExpectedMultiple(b) => a.extend(b),
+            ParseErr::ExpectedSingle(_, b) => errors.push(b),
+            ParseErr::ExpectedMultiple(_, b) => errors.extend(b),
             e => return e,
         };
-        ParseErr::ExpectedMultiple(a)
+        ParseErr::ExpectedMultiple(pos, errors)
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
-    Special,
+    Symbol,
     Alpha,
     Numeric,
 }
 
-pub type ParseResult<'a, T> = Result<(&'a str, T), ParseErr>;
+pub type ParseResult<'a, T> = Result<(ParseInput<'a>, T), ParseErr>;
 
 pub trait ParseResultEx<'a, T> {
     fn or_try(self, op: impl FnOnce() -> ParseResult<'a, T>) -> ParseResult<'a, T>;
@@ -111,237 +127,342 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
     }
 }
 
-/// Consume a single token from the input string, returning (the remainder string, the token).
-/// A token is one of:
-/// - .
-/// - ,
-/// - a contiguous sequence of alpha characters
-/// - a contiguous sequence of numeric characters
-/// All whitespace is ignored.
-pub fn consume<'a>(s: &'a str) -> ParseResult<(TokenKind, &'a str)> {
-    let s = s.trim();
-    let first = s.chars().next()
-        .ok_or(ParseErr::end_of_input())?;
-    // Special character tokens
-    if first == '.' || first == ',' {
-        let (a, b) = s.split_at(1);
-        return Ok((b.trim(), (TokenKind::Special, a.trim())));
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct ParseInput<'a> {
+    source: &'a str,
+    offset: usize,
+}
+
+impl<'a> ParseInput<'a> {
+    pub fn new(source: &'a str) -> Self {
+        let input = ParseInput { source, offset: 0 };
+        input.consume_ws()
     }
-    // Tokens are made up of characters of the same type as the first character.
-    let (allowed, kind) = match first {
-        'a'..='z' => ('a'..='z', TokenKind::Alpha),
-        '0'..='9' => ('0'..='9', TokenKind::Numeric),
-        c => return Err(ParseErr::unexpected_input(c)),
-    };
-    let (last, _) = s.char_indices()
-        .take_while(|(_, c)| allowed.contains(c))
-        .last()
-        .unwrap();
-    let (a, b) = s.split_at(last + 1);
-    Ok((b.trim(), (kind, a.trim())))
-}
 
-pub fn parse_i32(input: &str) -> ParseResult<i32> {
-    let (input, token) = consume(input)?;
-    let num = match token {
-        (TokenKind::Numeric, num) => {
-            num.parse::<i32>()
-                .map_err(|_| ParseErr::expected_number())
-        },
-        _ => Err(ParseErr::expected_number()),
-    }?;
-    Ok((input, num))
-}
+    pub fn as_str(&self) -> &'a str {
+        &self.source[self.offset..]
+    }
 
-pub fn parse_alpha(input: &str) -> ParseResult<&str> {
-    let (input, token) = consume(input)?;
-    match token {
-        (TokenKind::Alpha, alpha) => Ok((input, alpha)),
-        _ => Err(ParseErr::expected_alpha()),
+    pub fn pos(&self) -> InputPos {
+        InputPos(self.offset)
+    }
+
+    fn offset(&self, offset: usize) -> Self {
+        ParseInput { source: self.source, offset: self.offset + offset }
+    }
+
+    fn consume(self, pred: impl Fn(&char) -> bool) -> (Self, &'a str) {
+        let source = self.as_str();
+        let last = source
+            .char_indices()
+            .find(|(_, c)| !pred(c))
+            .map(|x| x.0)
+            .unwrap_or(source.len());
+    
+        let input = self.offset(last);
+        let consumed = &source[..last];
+        (input, consumed)
+    }
+    
+    fn consume_ws(self) -> Self {
+        self.consume(|c| c.is_whitespace()).0
     }
 }
 
-pub fn parse_token<'a>(input: &'a str, token: &str) -> ParseResult<'a, &'a str> {
-    let (input, (_, actual)) = consume(input)?;
-    if actual != token {
-        return Err(ParseErr::expected_token(token));
-    }
-    Ok((input, actual))
-}
-
-pub fn parse_end(input: &str) -> ParseResult<()> {
-    match consume(input) {
-        Err(ParseErr::EndOfInput) => Ok((input, ())),
-        _ => Err(ParseErr::expected_end_of_input()),
+impl<'a> fmt::Debug for ParseInput<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Input[{}]", self.as_str())
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod parseinput_tests {
     use super::*;
 
     #[test]
-    fn consume_special_characters() {
-        let input = ",.";
-        let (input, a) = consume(input).unwrap();
-        assert_eq!(a, (TokenKind::Special, ","));
-        let (input, a) = consume(input).unwrap();
-        assert_eq!(a, (TokenKind::Special, "."));
-        assert_eq!(input, "");
+    fn constructor() {
+        let input = ParseInput::new("   new ");
+        assert_eq!(input.as_str(), "new ");
+        assert_eq!(input.offset, 3);
+    }
+
+    #[test]
+    fn offset() {
+        let input = ParseInput::new("abcdef");
+        let input = input.offset(3);
+        assert_eq!(input.as_str(), "def");
+        assert_eq!(input.offset, 3);
+    }
+
+    #[test]
+    fn consume_empty() {
+        let input = ParseInput::new("");
+        let (input, consumed) = input.consume(|_| true);
+        assert_eq!("", consumed);
+        assert_eq!("", input.as_str());
+    }
+
+    #[test]
+    fn consume_many() {
+        let input = ParseInput::new("aaa");
+        let (input, consumed) = input.consume(|c| *c == 'a');
+        assert_eq!("aaa", consumed);
+        assert_eq!("", input.as_str());
+    }
+
+    #[test]
+    fn consume_one() {
+        let input = ParseInput::new("abc");
+        let (input, consumed) = input.consume(|c| *c == 'a');
+        assert_eq!("a", consumed);
+        assert_eq!("bc", input.as_str());
+    }
+
+    #[test]
+    fn consume_whitespace() {
+        let input = ParseInput::new("   abc   ");
+        let input = input.consume_ws();
+        assert_eq!("abc   ", input.as_str());
+    }
+}
+
+/// Consume a single token from the input, returning (the remainder input, the token).
+/// A token is one of:
+/// - . or , or + or -
+/// - a contiguous sequence of alpha characters
+/// - a contiguous sequence of numeric characters
+/// All whitespace is ignored.
+pub fn next_token<'a>(input: ParseInput<'a>) -> ParseResult<'a, (TokenKind, &'a str)> {
+    // Single character tokens.
+    let source = input.as_str();
+    let first_char = match source.chars().next() {
+        Some(c) => c,
+        None => return Err(ParseErr::end_of_input(input.pos())),
+    };
+    if first_char == '.' || first_char == ',' {
+        let input = input.offset(1).consume_ws();
+        let token = &source[..=0];
+        return Ok((input, (TokenKind::Symbol, token)));
+    }
+    // Multi-character tokens are made up of characters of the same type as the first character.
+    let (allowed, kind) = match first_char {
+        c if c.is_alphabetic() => ('a'..='z', TokenKind::Alpha),
+        c if c.is_numeric()    => ('0'..='9', TokenKind::Numeric),
+        c => return Err(ParseErr::unexpected_input(input.pos(), c)),
+    };
+    let (input, token) = input.consume(|c| allowed.contains(c));
+    let input = input.consume_ws();
+    Ok((input, (kind, token)))
+}
+
+#[cfg(test)]
+mod lexer_tests {
+    use super::*;
+
+    #[test]
+    fn consume_symbol_characters() {
+        let input = ParseInput::new(",.");
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Symbol, ","));
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Symbol, "."));
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn consume_numeric() {
-        let input = "01234";
-        let (input, a) = consume(input).unwrap();
+        let input = ParseInput::new("01234");
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Numeric, "01234"));
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn consume_alpha() {
-        let input = "abcdef";
-        let (input, a) = consume(input).unwrap();
+        let input = ParseInput::new("abcdef");
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Alpha, "abcdef"));
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn consume_ignores_whitespace() {
-        let input = "abcdef 1 2aa, 3.";
-        let (input, a) = consume(input).unwrap();
+        let input = ParseInput::new("abcdef 1 2aa, 3333..");
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Alpha, "abcdef"));
-        let (input, a) = consume(input).unwrap();
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Numeric, "1"));
-        let (input, a) = consume(input).unwrap();
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Numeric, "2"));
-        let (input, a) = consume(input).unwrap();
+        let (input, a) = next_token(input).unwrap();
         assert_eq!(a, (TokenKind::Alpha, "aa"));
-        let (input, a) = consume(input).unwrap();
-        assert_eq!(a, (TokenKind::Special, ","));
-        let (input, a) = consume(input).unwrap();
-        assert_eq!(a, (TokenKind::Numeric, "3"));
-        let (input, a) = consume(input).unwrap();
-        assert_eq!(a, (TokenKind::Special, "."));
-        assert_eq!(input, "");
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Symbol, ","));
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Numeric, "3333"));
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Symbol, "."));
+        let (input, a) = next_token(input).unwrap();
+        assert_eq!(a, (TokenKind::Symbol, "."));
+        assert_eq!(input.as_str(), "");
     }
+}
+
+pub fn parse_i32(input: ParseInput) -> ParseResult<i32> {
+    let (next, token) = next_token(input)?;
+    let num = match token {
+        (TokenKind::Numeric, num) => {
+            num.parse::<i32>()
+                .map_err(|_| ParseErr::expected_number(input.pos()))
+        },
+        _ => Err(ParseErr::expected_number(input.pos())),
+    }?;
+    Ok((next, num))
+}
+
+pub fn parse_alpha(input: ParseInput) -> ParseResult<&str> {
+    let (next, token) = next_token(input)?;
+    match token {
+        (TokenKind::Alpha, alpha) => Ok((next, alpha)),
+        _ => Err(ParseErr::expected_alpha(input.pos())),
+    }
+}
+
+pub fn parse_token<'a>(input: ParseInput<'a>, token: &str) -> ParseResult<'a, &'a str> {
+    let (next, (_, actual)) = next_token(input)?;
+    if actual != token {
+        return Err(ParseErr::expected_token(input.pos(), token));
+    }
+    Ok((next, actual))
+}
+
+pub fn parse_end(input: ParseInput) -> ParseResult<()> {
+    match next_token(input) {
+        Err(ParseErr::EndOfInput(_)) => Ok((input, ())),
+        _ => Err(ParseErr::expected_end_of_input(input.pos())),
+    }
+}
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
 
     #[test]
     fn parse_i32_success() {
-        let input = " 123 ";
+        let input = ParseInput::new("123");
         let (input, a) = parse_i32(input).unwrap();
         assert_eq!(a, 123);
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parse_i32_fail() {
-        let input = " xxx ";
+        let input = ParseInput::new("xxx");
         let err = parse_i32(input).unwrap_err();
-        assert_eq!(err, ParseErr::expected_number());
+        assert_eq!(err, ParseErr::expected_number(InputPos(0)));
     }
 
     #[test]
     fn parse_alpha_success() {
-        let input = " xxx ";
+        let input = ParseInput::new("xxx");
         let (input, a) = parse_alpha(input).unwrap();
         assert_eq!(a, "xxx");
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parse_alpha_fail() {
-        let input = " 123 ";
+        let input = ParseInput::new("123");
         let err = parse_alpha(input).unwrap_err();
-        assert_eq!(err, ParseErr::expected_alpha());
+        assert_eq!(err, ParseErr::expected_alpha(InputPos(0)));
     }
 
     #[test]
     fn parse_token_success() {
-        let input = " xxx ";
+        let input = ParseInput::new(" xxx ");
         let (input, a) = parse_token(input, "xxx").unwrap();
         assert_eq!(a, "xxx");
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
 
-        let input = " 123 ";
+        let input = ParseInput::new(" 123 ");
         let (input, a) = parse_token(input, "123").unwrap();
         assert_eq!(a, "123");
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
 
-        let input = " , ";
+        let input = ParseInput::new(" , ");
         let (input, a) = parse_token(input, ",").unwrap();
         assert_eq!(a, ",");
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parse_token_fail() {
-        let input = " xxx ";
+        let input = ParseInput::new(" xxx ");
         let err = parse_token(input, "yyy").unwrap_err();
-        assert_eq!(err, ParseErr::expected_token("yyy"));
+        assert_eq!(err, ParseErr::expected_token(InputPos(1), "yyy"));
     }
 
     #[test]
     fn parse_end_success() {
-        let input = "a";
+        let input = ParseInput::new("a");
         let (input, _) = parse_alpha(input).unwrap();
         let (input, a) = parse_end(input).unwrap();
         assert_eq!(a, ());
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parse_end_fail() {
-        let input = "a";
+        let input = ParseInput::new("a");
         let err = parse_end(input).unwrap_err();
-        assert_eq!(err, ParseErr::expected_end_of_input());
+        assert_eq!(err, ParseErr::expected_end_of_input(InputPos(0)));
     }
 
     #[test]
     fn parser_chaining() { 
 
-        fn parse_2(input: &str) -> ParseResult<(&str, i32)> {
+        fn parse_2(input: ParseInput) -> ParseResult<(&str, i32)> {
             let (input, a) = parse_alpha(input)?;
             let (input, b) = parse_i32(input)?;
             Ok((input, (a, b)))
         }
 
-        fn parse_exact(input: &str) -> ParseResult<()> {
+        fn parse_exact(input: ParseInput) -> ParseResult<()> {
             let (input, _) = parse_token(input, "aaa")?;
             let (input, _) = parse_token(input, "bbb")?;
             let (input, _) = parse_token(input, "ccc")?;
             Ok((input, ()))
         }
 
-        let input = "aaa bbb ccc hello 123";
+        let input = ParseInput::new("aaa bbb ccc hello 123");
         let (input, a) = parse_exact(input).unwrap();
         assert_eq!(a, ());
         let (input, a) = parse_2(input).unwrap();
         assert_eq!(a, ("hello", 123));
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parser_loops() {
 
-        fn parse_foo(input: &str) -> ParseResult<()> {
+        fn parse_foo(input: ParseInput) -> ParseResult<()> {
             let (input, _) = parse_token(input, "aaa")?;
             let (input, _) = parse_token(input, "bbb")?;
             Ok((input, ()))
         }
 
-        let input = "aaa bbb aaa bbb aaa bbb ccc";
+        let input = ParseInput::new("aaa bbb aaa bbb aaa bbb ccc");
         let mut input = input;
         while let Ok((input_, ())) = parse_foo(input) {
             input = input_;
         }
-        assert_eq!(input, "ccc");
+        assert_eq!(input.as_str(), "ccc");
     }
 
     #[test]
     fn parser_loops_with_explicit_termination() {
 
-        fn try_parse_next(input: &str) -> ParseResult<Option<&'static str>> {
+        fn try_parse_next(input: ParseInput) -> ParseResult<Option<&'static str>> {
             // check for terminator token
             if let Ok((input, _)) = parse_token(input, "ccc") {
                 return Ok((input, None));
@@ -351,7 +472,7 @@ mod tests {
             Ok((input, Some("foo bar")))
         }
 
-        let input = "aaa bbb aaa bbb aaa bbb ccc";
+        let input = ParseInput::new("aaa bbb aaa bbb aaa bbb ccc");
         let mut input = input;
         while let Ok((input_, result)) = try_parse_next(input) {
             input = input_;
@@ -359,25 +480,25 @@ mod tests {
                 assert_eq!(result, "foo bar");
             }
         }
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 
     #[test]
     fn parser_combination_with_or_try() {
 
-        fn parse_num(input: &str) -> ParseResult<i32> {
+        fn parse_num(input: ParseInput) -> ParseResult<i32> {
             parse_token(input, "zero").map_value(|_| 0)
                 .or_try(|| parse_i32(input))
         }
 
-        let input = "123";
+        let input = ParseInput::new("123");
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 123);
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
 
-        let input = "zero";
+        let input = ParseInput::new("zero");
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 0);
-        assert_eq!(input, "");
+        assert_eq!(input.as_str(), "");
     }
 }
