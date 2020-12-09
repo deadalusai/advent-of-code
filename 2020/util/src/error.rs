@@ -77,3 +77,4 @@ use std;
 impl_from_error!(std::io::Error);
 impl_from_error!(std::num::ParseIntError);
 impl_from_debug!(::ConsumeIteratorError);
+impl_from_debug!(::parse::ParseErr);

@@ -3,7 +3,7 @@ extern crate util;
 use std::collections::{ HashSet };
 
 use util::{ read_input };
-use util::parse::{ ParseInput, ParseResult, ParseResultEx };
+use util::parse::{ Input, ParseResult, ParseResultEx };
 use util::error::{ AppErr };
 
 fn main() -> Result<(), AppErr> {
@@ -35,22 +35,22 @@ fn main() -> Result<(), AppErr> {
 
     // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
 
-    fn parse_name(input: ParseInput) -> ParseResult<String> {
+    fn parse_name(input: Input) -> ParseResult<String> {
         let (input, word1) = input.parse_alpha()?;
         let (input, word2) = input.parse_alpha()?;
         Ok((input, format!("{} {}", word1, word2)))
     }
 
-    fn parse_rule(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
+    fn parse_rule(input: Input) -> ParseResult<Option<(String, i32)>> {
         
-        fn no_bags(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
+        fn no_bags(input: Input) -> ParseResult<Option<(String, i32)>> {
             let (input, _) = input.parse_token("no")?;
             let (input, _) = input.parse_token("other")?;
             let (input, _) = input.parse_token("bags")?;
             Ok((input, None))
         }
         
-        fn some_bags(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
+        fn some_bags(input: Input) -> ParseResult<Option<(String, i32)>> {
             let (input, num) = input.parse_i32()?;
             let (input, name) = parse_name(input)?;
             let (input, _) = input.parse_token(if num == 1 { "bag" } else { "bags" })?;
@@ -60,7 +60,7 @@ fn main() -> Result<(), AppErr> {
         no_bags(input).or_try(|| some_bags(input))
     }
 
-    fn parse_bag(input: ParseInput) -> ParseResult<BagRule> {
+    fn parse_bag(input: Input) -> ParseResult<BagRule> {
         let (input, name) = parse_name(input)?;
         let (input, _) = input.parse_token("bags")?;
         let (input, _) = input.parse_token("contain")?;
@@ -85,7 +85,7 @@ fn main() -> Result<(), AppErr> {
     let bags = read_input("input.txt")?
         .iter()
         .map(|line| {
-            let input = ParseInput::new(line);
+            let input = Input::new(line);
             parse_bag(input)
                 .map(|r| r.1)
                 .map_err(|e| AppErr::from_debug("parse error", &e))
