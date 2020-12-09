@@ -62,13 +62,13 @@ fn main() -> Result<(), AppErr> {
         .collect::<Result<Vec<_>, _>>()?;
 
     enum Step { Continue, Break }
-    fn run_program(instructions: &[Instruction], mut step: impl FnMut(Instruction, usize) -> Step) -> isize { 
+    fn run_program(instructions: &[Instruction], mut step: impl FnMut(Instruction, usize) -> Step) -> Option<isize> { 
         let mut acc: isize = 0;
         let mut pc: usize = 0;
         loop {
             let inst = instructions[pc];
             if let Step::Break = step(inst, pc) {
-                break;
+                return None;
             }
             match inst {
                 Instruction(Op::Acc, value) => {
@@ -82,8 +82,11 @@ fn main() -> Result<(), AppErr> {
                     pc += 1;
                 },
             }
+            // check for program termination
+            if pc >= instructions.len() {
+                return Some(acc);
+            }
         }
-        acc
     }
 
     let mut seen = HashSet::new();
@@ -91,7 +94,47 @@ fn main() -> Result<(), AppErr> {
         if seen.insert(pc) { Step::Continue } else { Step::Break }
     });
 
-    println!("Part 1: acc before first repeated command = {}", acc);
+    println!("Part 1: acc before first repeated command = {:?}", acc);
+
+    /*
+    --- Part Two ---
+
+    The program is supposed to terminate by attempting to execute an instruction immediately
+    after the last instruction in the file. By changing exactly one jmp or nop, you can
+    repair the boot code and make it terminate correctly.
+
+    Fix the program so that it terminates normally by changing exactly one jmp (to nop)
+    or nop (to jmp). What is the value of the accumulator after the program terminates?
+    */
+
+    fn test_program(instructions: &[Instruction]) -> Option<isize> {
+        let mut seen = HashSet::new();
+        run_program(&instructions, |_, pc| {
+            if seen.insert(pc) { Step::Continue } else { Step::Break }
+        })
+    }
+
+    /// Flip Nop to Jmp and Jmp to Nop, ignore Acc
+    fn flip_instruction(inst: &mut Instruction) {
+        inst.0 = match inst.0 {
+            Op::Nop => Op::Jmp,
+            Op::Jmp => Op::Nop,
+            Op::Acc => Op::Acc,
+        };
+    }
+
+    let mut instructions = instructions;
+    for i in 0..instructions.len() {
+
+        flip_instruction(&mut instructions[i]);
+
+        if let Some(acc) = test_program(&instructions) {
+            println!("Part 2: acc = {:?}", acc);
+            break;
+        }
+
+        flip_instruction(&mut instructions[i]);
+    }
 
     Ok(())
 }
