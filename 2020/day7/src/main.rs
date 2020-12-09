@@ -3,7 +3,7 @@ extern crate util;
 use std::collections::{ HashSet };
 
 use util::{ read_input };
-use util::parse::{ parse_i32, parse_alpha, parse_token, parse_end, ParseInput, ParseResult, ParseResultEx };
+use util::parse::{ ParseInput, ParseResult, ParseResultEx };
 use util::error::{ AppErr };
 
 fn main() -> Result<(), AppErr> {
@@ -36,24 +36,24 @@ fn main() -> Result<(), AppErr> {
     // `a b` bags contain n `c d` bags, 1 `e f` bag, no `g h` bags, no other bags.
 
     fn parse_name(input: ParseInput) -> ParseResult<String> {
-        let (input, word1) = parse_alpha(input)?;
-        let (input, word2) = parse_alpha(input)?;
+        let (input, word1) = input.parse_alpha()?;
+        let (input, word2) = input.parse_alpha()?;
         Ok((input, format!("{} {}", word1, word2)))
     }
 
     fn parse_rule(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
         
         fn no_bags(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
-            let (input, _) = parse_token(input, "no")?;
-            let (input, _) = parse_token(input, "other")?;
-            let (input, _) = parse_token(input, "bags")?;
+            let (input, _) = input.parse_token("no")?;
+            let (input, _) = input.parse_token("other")?;
+            let (input, _) = input.parse_token("bags")?;
             Ok((input, None))
         }
         
         fn some_bags(input: ParseInput) -> ParseResult<Option<(String, i32)>> {
-            let (input, num) = parse_i32(input)?;
+            let (input, num) = input.parse_i32()?;
             let (input, name) = parse_name(input)?;
-            let (input, _) = parse_token(input, if num == 1 { "bag" } else { "bags" })?;
+            let (input, _) = input.parse_token(if num == 1 { "bag" } else { "bags" })?;
             Ok((input, Some((name, num))))
         }
 
@@ -62,8 +62,8 @@ fn main() -> Result<(), AppErr> {
 
     fn parse_bag(input: ParseInput) -> ParseResult<BagRule> {
         let (input, name) = parse_name(input)?;
-        let (input, _) = parse_token(input, "bags")?;
-        let (input, _) = parse_token(input, "contain")?;
+        let (input, _) = input.parse_token("bags")?;
+        let (input, _) = input.parse_token("contain")?;
         let mut rules = Vec::new();
         let mut input = input;
         loop {
@@ -72,13 +72,13 @@ fn main() -> Result<(), AppErr> {
                 rules.push(rule);
             }
             // Continue scanning for more rules?
-            let (next, term) = parse_token(next, ",").or_try(|| parse_token(next, "."))?;
+            let (next, term) = next.parse_token(",").or_try(|| next.parse_token("."))?;
             input = next;
             if term == "." {
                 break;
             }
         }
-        let (input, _) = parse_end(input)?;
+        let (input, _) = input.parse_end()?;
         Ok((input, BagRule { name, rules }))
     }
 
