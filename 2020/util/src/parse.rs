@@ -115,7 +115,7 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
             Ok(r) => Ok(r),
             Err(a) => match op() {
                 Ok(r) => Ok(r),
-                Err(b) => Err(ParseErr::combine(a, b))
+                Err(b) => Err(ParseErr::combine(a, b)),
             }
         }
     }
@@ -143,7 +143,7 @@ pub struct Input<'a> {
 
 impl<'a> fmt::Debug for Input<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Input[{}]", self.as_str())
+        write!(f, "Input[{}]", self.remaining())
     }
 }
 
@@ -153,8 +153,12 @@ impl<'a> Input<'a> {
         input.consume_ws()
     }
 
-    pub fn as_str(&self) -> &'a str {
+    pub fn remaining(&self) -> &'a str {
         &self.source[self.offset..]
+    }
+
+    pub fn source(&self) -> &'a str {
+        self.source
     }
 
     pub fn pos(&self) -> InputPos {
@@ -165,8 +169,8 @@ impl<'a> Input<'a> {
         Input { source: self.source, offset: self.offset + offset }
     }
 
-    fn consume(self, pred: impl Fn(&char) -> bool) -> (Self, &'a str) {
-        let source = self.as_str();
+    fn consume(self, mut pred: impl FnMut(&char) -> bool) -> (Self, &'a str) {
+        let source = self.remaining();
         let last = source
             .char_indices()
             .find(|(_, c)| !pred(c))
@@ -190,7 +194,7 @@ mod consume_tests {
     #[test]
     fn constructor() {
         let input = Input::new("   new ");
-        assert_eq!(input.as_str(), "new ");
+        assert_eq!(input.remaining(), "new ");
         assert_eq!(input.offset, 3);
     }
 
@@ -198,7 +202,7 @@ mod consume_tests {
     fn offset() {
         let input = Input::new("abcdef");
         let input = input.offset(3);
-        assert_eq!(input.as_str(), "def");
+        assert_eq!(input.remaining(), "def");
         assert_eq!(input.offset, 3);
     }
 
@@ -207,7 +211,7 @@ mod consume_tests {
         let input = Input::new("");
         let (input, consumed) = input.consume(|_| true);
         assert_eq!("", consumed);
-        assert_eq!("", input.as_str());
+        assert_eq!("", input.remaining());
     }
 
     #[test]
@@ -215,7 +219,7 @@ mod consume_tests {
         let input = Input::new("aaa");
         let (input, consumed) = input.consume(|c| *c == 'a');
         assert_eq!("aaa", consumed);
-        assert_eq!("", input.as_str());
+        assert_eq!("", input.remaining());
     }
 
     #[test]
@@ -223,14 +227,14 @@ mod consume_tests {
         let input = Input::new("abc");
         let (input, consumed) = input.consume(|c| *c == 'a');
         assert_eq!("a", consumed);
-        assert_eq!("bc", input.as_str());
+        assert_eq!("bc", input.remaining());
     }
 
     #[test]
     fn consume_whitespace() {
         let input = Input::new("   abc   ");
         let input = input.consume_ws();
-        assert_eq!("abc   ", input.as_str());
+        assert_eq!("abc   ", input.remaining());
     }
 }
 
@@ -242,26 +246,33 @@ impl<'a> Input<'a> {
     /// - a contiguous sequence of numeric characters
     /// All whitespace is ignored.
     pub fn next_token(self) -> ParseResult<'a, (TokenKind, &'a str)> {
-        // Single character tokens.
-        let source = self.as_str();
-        let first_char = match source.chars().next() {
-            Some(c) => c,
-            None => return Err(ParseErr::end_of_input(self.pos())),
-        };
-        if first_char == '.' || first_char == ',' || first_char == '+' || first_char == '-' {
-            let input = self.offset(1).consume_ws();
-            let token = &source[..=0];
-            return Ok((input, (TokenKind::Symbol, token)));
+        let symbols = ['.', ',', '+', '-'];
+        let source = self.remaining();
+        // Decide what to do based on the first input character
+        match source.chars().next() {
+            // Symbol tokens
+            Some(c) if symbols.contains(&c) => {
+                let token = &source[..=0];
+                let input = self.offset(1);
+                Ok((input.consume_ws(), (TokenKind::Symbol, token)))
+            },
+            // Alpha sequences
+            Some(c) if c.is_alphabetic() => {
+                let lower = 'a'..='z';
+                let upper = 'A'..='Z';
+                let (input, token) = self.consume(|c| lower.contains(c) || upper.contains(c));
+                Ok((input.consume_ws(), (TokenKind::Alpha, token)))
+            },
+            // Numeric sequences
+            Some(c) if c.is_numeric() => {
+                let numeric = '0'..='9';
+                let (input, token) = self.consume(|c| numeric.contains(c));
+                Ok((input.consume_ws(), (TokenKind::Numeric, token)))
+            },
+            // Error cases
+            Some(c) => Err(ParseErr::unexpected_input(self.pos(), c)),
+            None    => Err(ParseErr::end_of_input(self.pos())),
         }
-        // Multi-character tokens are made up of characters of the same type as the first character.
-        let (allowed, kind) = match first_char {
-            c if c.is_alphabetic() => ('a'..='z', TokenKind::Alpha),
-            c if c.is_numeric()    => ('0'..='9', TokenKind::Numeric),
-            c => return Err(ParseErr::unexpected_input(self.pos(), c)),
-        };
-        let (input, token) = self.consume(|c| allowed.contains(c));
-        let input = input.consume_ws();
-        Ok((input, (kind, token)))
     }
 }
 
@@ -276,7 +287,7 @@ mod lexer_tests {
         assert_eq!(a, (TokenKind::Symbol, ","));
         let (input, a) = input.next_token().unwrap();
         assert_eq!(a, (TokenKind::Symbol, "."));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -284,7 +295,7 @@ mod lexer_tests {
         let input = Input::new("01234");
         let (input, a) = input.next_token().unwrap();
         assert_eq!(a, (TokenKind::Numeric, "01234"));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -292,7 +303,7 @@ mod lexer_tests {
         let input = Input::new("abcdef");
         let (input, a) = input.next_token().unwrap();
         assert_eq!(a, (TokenKind::Alpha, "abcdef"));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -314,7 +325,7 @@ mod lexer_tests {
         assert_eq!(a, (TokenKind::Symbol, "."));
         let (input, a) = input.next_token().unwrap();
         assert_eq!(a, (TokenKind::Symbol, "."));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 }
 
@@ -364,7 +375,7 @@ mod parse_tests {
         let input = Input::new("123");
         let (input, a) = input.parse_i32().unwrap();
         assert_eq!(a, 123);
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -379,7 +390,7 @@ mod parse_tests {
         let input = Input::new("xxx");
         let (input, a) = input.parse_alpha().unwrap();
         assert_eq!(a, "xxx");
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -394,17 +405,17 @@ mod parse_tests {
         let input = Input::new(" xxx ");
         let (input, a) = input.parse_token("xxx").unwrap();
         assert_eq!(a, "xxx");
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
 
         let input = Input::new(" 123 ");
         let (input, a) = input.parse_token("123").unwrap();
         assert_eq!(a, "123");
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
 
         let input = Input::new(" , ");
         let (input, a) = input.parse_token(",").unwrap();
         assert_eq!(a, ",");
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -420,7 +431,7 @@ mod parse_tests {
         let (input, _) = input.parse_alpha().unwrap();
         let (input, a) = input.parse_end().unwrap();
         assert_eq!(a, ());
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -451,7 +462,7 @@ mod parse_tests {
         assert_eq!(a, ());
         let (input, a) = parse_2(input).unwrap();
         assert_eq!(a, ("hello", 123));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -468,7 +479,7 @@ mod parse_tests {
         while let Ok((input_, ())) = parse_foo(input) {
             input = input_;
         }
-        assert_eq!(input.as_str(), "ccc");
+        assert_eq!(input.remaining(), "ccc");
     }
 
     #[test]
@@ -492,7 +503,7 @@ mod parse_tests {
                 assert_eq!(result, "foo bar");
             }
         }
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 
     #[test]
@@ -506,11 +517,11 @@ mod parse_tests {
         let input = Input::new("123");
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 123);
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
 
         let input = Input::new("zero");
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 0);
-        assert_eq!(input.as_str(), "");
+        assert_eq!(input.remaining(), "");
     }
 }
