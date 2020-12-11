@@ -19,10 +19,12 @@ fn main() -> Result<(), AppErr> {
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     enum Pos { Empty, Occupied, Floor }
+    type WH = (isize, isize);
+    type XY = (isize, isize);
 
     let input = read_input("input.txt")?;
-    let width = input[0].len() as isize;
-    let height = input.len() as isize;
+    let w = input[0].len() as isize;
+    let h = input.len() as isize;
     let grid = input
         .iter()
         .flat_map(|line| line.chars().map(|c|
@@ -34,20 +36,79 @@ fn main() -> Result<(), AppErr> {
         ))
         .collect::<Vec<_>>();
 
-    fn get_pos_and_neighbors((x, y): (isize, isize), (w, h): (isize, isize), grid: &[Pos]) -> (Pos, usize) {
+    fn cardinal_offsets() -> impl Iterator<Item=XY> {
+        (-1..=1).flat_map(|x| (-1..=1).map(move |y| (x, y))).filter(|xy| *xy != (0, 0))
+    }
+
+    fn grid_positions((w, h): WH) -> impl Iterator<Item=XY> {
+        (0..w).flat_map(move |x| (0..h).map(move |y| (x, y)))
+    }
+
+    fn iterate_until_stable(grid: &[Pos], mut calc_next: impl FnMut(&[Pos], &mut [Pos])) -> (usize, usize) {
+        let mut iteration_count = 0;
+        let mut curr = grid.to_vec();
+        let mut next = curr.clone();
+        loop {
+            calc_next(&curr, &mut next);
+            if next == curr {
+                // Grid is stable
+                break;
+            }
+            std::mem::swap(&mut curr, &mut next);
+            iteration_count += 1;
+        }
+        let occupied_count = curr.iter().filter(|p| **p == Pos::Occupied).count();
+        (iteration_count, occupied_count)
+    }
+
+    fn get_pos_and_neighbors_part1(grid: &[Pos], (w, h): WH, (x, y): XY) -> (Pos, usize) {
         let mut count = 0;
-        for &off_x in &[-1, 0, 1] {
-            for &off_y in &[-1, 0, 1] {
-                if off_x == 0 && off_y == 0 {
-                    continue;
-                }
-                let x = x + off_x;
-                let y = y + off_y;
+        for (off_x, off_y) in cardinal_offsets() {
+            let x = x + off_x;
+            let y = y + off_y;
+            if x < 0 || x >= w || y < 0 || y >= h {
+                continue;
+            }
+            let p = grid[(y * w + x) as usize];
+            if p == Pos::Occupied {
+                count += 1;
+            }
+        }
+        let p = grid[(y * w + x) as usize];
+        (p, count)
+    }
+
+    let (iteration_count, occupied_count) = iterate_until_stable(&grid, |curr, next| {
+        for (x, y) in grid_positions((w, h)) {
+            let b = match get_pos_and_neighbors_part1(&curr, (w, h), (x, y)) {
+                (Pos::Empty, o) if o == 0 => Pos::Occupied,
+                (Pos::Occupied, o) if o >= 4 => Pos::Empty,
+                (p, _) => p
+            };
+            next[(y * w + x) as usize] = b;
+        }
+    });
+
+    println!("Part 1: {} iterations until stable, {} occupied seats", iteration_count, occupied_count);
+
+    fn get_pos_and_neighbors_part2(grid: &[Pos], (w, h): WH, (x, y): XY) -> (Pos, usize) {
+        let mut count = 0;
+        for (off_x, off_y) in cardinal_offsets() {
+            let mut x = x;
+            let mut y = y;
+            loop {
+                x += off_x;
+                y += off_y;
                 if x < 0 || x >= w || y < 0 || y >= h {
-                    continue;
+                    break;
                 }
-                if let Pos::Occupied = grid[(y * w + x) as usize] {
+                let p = grid[(y * w + x) as usize];
+                if p == Pos::Occupied {
                     count += 1;
+                    break;
+                }
+                if p == Pos::Empty {
+                    break;
                 }
             }
         }
@@ -55,34 +116,18 @@ fn main() -> Result<(), AppErr> {
         (p, count)
     }
 
-    fn get_next_state((w, h): (isize, isize), grid: &Vec<Pos>) -> Vec<Pos> {
-        let mut next = grid.clone();
-        for x in 0..w {
-            for y in 0..h {
-                let b = match get_pos_and_neighbors((x, y), (w, h), grid) {
-                    (Pos::Empty, o) if o == 0 => Pos::Occupied,
-                    (Pos::Occupied, o) if o >= 4 => Pos::Empty,
-                    (p, _) => p
-                };
-                next[(y * w + x) as usize] = b;
-            }
+    let (iteration_count, occupied_count) = iterate_until_stable(&grid, |curr, next| {
+        for (x, y) in grid_positions((w, h)) {
+            let b = match get_pos_and_neighbors_part2(&curr, (w, h), (x, y)) {
+                (Pos::Empty, o) if o == 0 => Pos::Occupied,
+                (Pos::Occupied, o) if o >= 5 => Pos::Empty,
+                (p, _) => p
+            };
+            next[(y * w + x) as usize] = b;
         }
-        next
-    }
+    });
 
-    let mut count = 0;
-    let mut grid = grid;
-    loop {
-        let next = get_next_state((width, height), &grid);
-        if next == grid {
-            break;
-        }
-        grid = next;
-        count += 1;
-    }
-    let occupied_count = grid.iter().filter(|p| **p == Pos::Occupied).count();
-
-    println!("Part 1: {} iterations until stable, {} occupied seats", count, occupied_count);
+    println!("Part 2: {} iterations until stable, {} occupied seats", iteration_count, occupied_count);
 
     Ok(())
 }
