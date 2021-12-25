@@ -3,6 +3,7 @@ extern crate itertools;
 
 use util::{ read_input };
 use util::error::{ AppErr };
+use itertools::{ Itertools };
 
 fn main() -> Result<(), AppErr> {
     /*
@@ -24,7 +25,6 @@ fn main() -> Result<(), AppErr> {
             .collect::<Result<Vec<i32>, AppErr>>()?;
 
     let mut seq = input.iter();
-
     let mut curr = seq.next().unwrap();
     let mut count = 0;
 
@@ -35,7 +35,24 @@ fn main() -> Result<(), AppErr> {
         curr = v;
     }
 
-    println!("Result: {}", count);
+    println!("Part 1: {}", count);
+
+
+    let mut seq = input.iter()
+        .tuple_windows::<(_, _, _)>()
+        .map(|(a, b, c)| a + b + c);
+    let mut curr = seq.next().unwrap();
+    let mut count = 0;
+
+    for v in seq {
+        if v > curr {
+            count += 1;
+        }
+        curr = v;
+    }
+
+
+    println!("Part 2: {}", count);
 
     Ok(())
 }
