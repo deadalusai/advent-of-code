@@ -75,3 +75,4 @@ impl_from_error!(std::num::ParseIntError);
 impl_from_debug!(::ConsumeIteratorError);
 impl_from_debug!(::parse::ParseErr);
 impl_from_debug!(&str);
+impl_from_debug!(String);

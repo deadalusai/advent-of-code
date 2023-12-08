@@ -2,6 +2,7 @@
 name = "day1"
 version = "0.1.0"
 authors = ["Benjamin Fox <deadalus.ai@gmail.com>"]
+edition = "2021"
 
 [dependencies]
 util = { path = "../util" }
