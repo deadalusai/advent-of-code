@@ -10,12 +10,11 @@ fn main() -> Result<(), AppErr> {
     */
 
     fn parse_item_part_1(s: &str) -> Result<u32, AppErr> {
-        let numbers = s.chars()
-            .filter_map(|c| c.to_digit(10))
-            .collect::<Vec<_>>();
+        let mut numbers = s.chars()
+            .filter_map(|c| c.to_digit(10));
 
-        let first = numbers.iter().next().ok_or("No calibration numbers in input")?;
-        let last = numbers.iter().rev().next().unwrap();
+        let first = numbers.next().ok_or("No calibration numbers in input")?;
+        let last = numbers.last().unwrap_or(first);
         Ok((first * 10) + last)
     }
 
@@ -53,12 +52,11 @@ fn main() -> Result<(), AppErr> {
 
     fn parse_item_part_2(s: &str) -> Result<u32, AppErr> {
         // Need to find overlapping matches
-        let numbers = (0..s.len())
-            .filter_map(|offset| extract_digit(&s[offset..]))
-            .collect::<Vec<_>>();
+        let mut numbers = (0..s.len())
+            .filter_map(|offset| extract_digit(&s[offset..]));
 
-        let first = numbers.iter().next().ok_or("No calibration numbers in input")?;
-        let last = numbers.iter().rev().next().unwrap();
+        let first = numbers.next().ok_or("No calibration numbers in input")?;
+        let last = numbers.last().unwrap_or(first);
         Ok((first * 10) + last)
     }
 
