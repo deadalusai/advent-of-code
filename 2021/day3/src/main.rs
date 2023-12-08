@@ -1,11 +1,10 @@
-extern crate util;
 extern crate itertools;
+extern crate util;
 
-use util::{ read_input };
-use util::error::{ AppErr };
+use util::error::AppErr;
+use util::read_input;
 
 fn main() -> Result<(), AppErr> {
-
     let input = read_input("input.txt")?;
 
     /*
@@ -17,11 +16,11 @@ fn main() -> Result<(), AppErr> {
         010   G = 110
         110   E = 001
         101
-        
+
         Use the binary numbers in your diagnostic report to calculate the gamma rate and epsilon rate, then multiply them together.
         What is the power consumption of the submarine? (Be sure to represent your answer in decimal, not binary.)
     */
-    
+
     fn count_bits_at_index(input: &[String], at_bit_index: usize) -> (usize, usize) {
         let mut ones_count = 0;
         let mut zeroes_count = 0;
@@ -29,7 +28,7 @@ fn main() -> Result<(), AppErr> {
             match &line[at_bit_index..=at_bit_index] {
                 "1" => ones_count += 1,
                 "0" => zeroes_count += 1,
-                _   => unreachable!(),
+                _ => unreachable!(),
             }
         }
         (ones_count, zeroes_count)
@@ -45,7 +44,7 @@ fn main() -> Result<(), AppErr> {
         // Note: bits in input are LEAST SIGNIFICANT first
         //  input("10110") => usize(01101)
         let bit_index = column_count - i - 1;
-        gamma   |= if ones > zeroes { 1 << bit_index } else { 0 };
+        gamma |= if ones > zeroes { 1 << bit_index } else { 0 };
         epsilon |= if zeroes > ones { 1 << bit_index } else { 0 };
     }
 
@@ -63,15 +62,33 @@ fn main() -> Result<(), AppErr> {
         (Be sure to represent your answer in decimal, not binary.)
     */
 
-    enum FindBehavior { MostCommonPreferOnes, LeastCommonPreferZeroes }
+    enum FindBehavior {
+        MostCommonPreferOnes,
+        LeastCommonPreferZeroes,
+    }
 
-    fn find_entry_with_most_common_bits(mut input: Vec<String>, behavior: FindBehavior) -> Option<String> {
+    fn find_entry_with_most_common_bits(
+        mut input: Vec<String>,
+        behavior: FindBehavior,
+    ) -> Option<String> {
         let column_count = input.iter().next().unwrap().trim().len();
         for i in 0..column_count {
             let (ones, zeroes) = count_bits_at_index(&input, i);
             let filter_char = match behavior {
-                FindBehavior::MostCommonPreferOnes    => if ones >= zeroes { "1" } else { "0" },
-                FindBehavior::LeastCommonPreferZeroes => if zeroes <= ones { "0" } else { "1" },
+                FindBehavior::MostCommonPreferOnes => {
+                    if ones >= zeroes {
+                        "1"
+                    } else {
+                        "0"
+                    }
+                }
+                FindBehavior::LeastCommonPreferZeroes => {
+                    if zeroes <= ones {
+                        "0"
+                    } else {
+                        "1"
+                    }
+                }
             };
             // Filter to strings which match the character at this position
             input.retain(|line| &line[i..=i] == filter_char);
@@ -85,20 +102,28 @@ fn main() -> Result<(), AppErr> {
 
     fn input_binary_to_usize(line: &str) -> usize {
         let len = line.len();
-        line.char_indices()
-            .fold(0_usize, |r, (i, c)| {
-                r | match c {
-                    '1' => 1 << len - i - 1,
-                    '0' => 0,
-                    _   => unreachable!(),
-                }
-            })
+        line.char_indices().fold(0_usize, |r, (i, c)| {
+            r | match c {
+                '1' => 1 << len - i - 1,
+                '0' => 0,
+                _ => unreachable!(),
+            }
+        })
     }
 
-    let oxy_generator_rating = find_entry_with_most_common_bits(input.clone(), FindBehavior::MostCommonPreferOnes).map(|s| input_binary_to_usize(&s)).expect("oxy");
-    let co2_scrubber_rating = find_entry_with_most_common_bits(input, FindBehavior::LeastCommonPreferZeroes).map(|s| input_binary_to_usize(&s)).expect("co2");
+    let oxy_generator_rating =
+        find_entry_with_most_common_bits(input.clone(), FindBehavior::MostCommonPreferOnes)
+            .map(|s| input_binary_to_usize(&s))
+            .expect("oxy");
+    let co2_scrubber_rating =
+        find_entry_with_most_common_bits(input, FindBehavior::LeastCommonPreferZeroes)
+            .map(|s| input_binary_to_usize(&s))
+            .expect("co2");
 
-    println!("oxy: {}, co2: {}", oxy_generator_rating, co2_scrubber_rating);
+    println!(
+        "oxy: {}, co2: {}",
+        oxy_generator_rating, co2_scrubber_rating
+    );
 
     let result = oxy_generator_rating * co2_scrubber_rating;
 
