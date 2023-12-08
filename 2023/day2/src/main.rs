@@ -89,5 +89,22 @@ fn main() -> Result<(), AppErr> {
 
     println!("Part 1: {:?}", result);
 
+    /*
+        --- Part Two ---
+        For each game, find the minimum set of cubes that must have been present. What is the sum of the power of these sets?
+    */
+
+    let result: usize = input.iter()
+        // Find the minimum cubes required to play each game
+        .map(|g| g.rounds.iter()
+                .map(|r| (r.red, r.green, r.blue))
+                .reduce(|(r1, g1, b1), (r2, g2, b2)| (r1.max(r2), g1.max(g2), b1.max(b2)))
+                .unwrap_or_default())
+        // Find the power for each minimum set
+        .map(|(r, g, b)| r * g * b)
+        .sum();
+
+    println!("Part 2: {:?}", result);
+
     Ok(())
 }
