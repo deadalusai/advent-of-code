@@ -11,8 +11,14 @@ pub enum TokenKind {
 pub type ParseResult<'a, T> = Result<(Input<'a>, T), ParseErr<'a>>;
 
 pub trait ParseResultEx<'a, T> {
+    /// Applies the second parser if `self` represents a failed Parse.
     fn or_try(self, op: impl FnOnce() -> ParseResult<'a, T>) -> ParseResult<'a, T>;
+
+    /// Maps the "value" component of a ParseResult. 
     fn map_val<V>(self, op: impl FnOnce(T) -> V) -> ParseResult<'a, V>;
+
+    /// Replaces the "value" component of a ParseResult.
+    /// Useful for assigning a value to a token.
     fn val<V>(self, val: V) -> ParseResult<'a, V>;
 }
 
@@ -26,7 +32,7 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
             }
         }
     }
-    
+
     fn map_val<V>(self, op: impl FnOnce(T) -> V) -> ParseResult<'a, V> {
         match self {
             Ok((input, v)) => Ok((input, op(v))),
@@ -432,6 +438,98 @@ mod parse_tests {
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 0);
         assert_eq!(input.remaining(), "");
+    }
+}
+
+impl<'a> Input<'a> {
+    pub fn parse_separated<I, Fi, S, Fs>(self, item: Fi, separator: Fs) -> ParseResult<'a, Vec<I>>
+    where
+        Fi: Fn(Input<'a>) -> ParseResult<'a, I>,
+        Fs: Fn(Input<'a>) -> ParseResult<'a, S>
+    {
+        let mut input = self.clone();
+        let mut results = Vec::new();
+
+        loop {
+            // Parse item
+            let (next, val) = item(input)?;
+            results.push(val);
+
+            // Check for separator
+            if let Ok((next, _)) = separator(next) {
+                input = next;
+                continue;
+            }
+
+            // Reached end of input
+            input = next;
+            break;
+        }
+
+        Ok((input, results))
+    }
+
+    pub fn parse_delimited<Ds, Fds, I, Fi, De, Fde>(self, start: Fds, item: Fi, end: Fde) -> ParseResult<'a, I>
+    where
+        Fds: Fn(Input<'a>) -> ParseResult<'a, Ds>,
+        Fi: Fn(Input<'a>) -> ParseResult<'a, I>,
+        Fde: Fn(Input<'a>) -> ParseResult<'a, De>
+    {
+        let (input, _) = start(self)?;
+        let (input, item) = item(input)?;
+        let (input, _) = end(input)?;
+        Ok((input, item))
+    }
+}
+
+#[cfg(test)]
+mod combinator_tests {
+    use super::*;
+
+    #[test]
+    fn parse_separated_1() {
+        let input = Input::new("hello, my, name, is, alfred");
+        let (input, results) = input.parse_separated(|next| next.parse_alpha(), |next| next.parse_token(",")).unwrap();
+        assert_eq!("", input.remaining());
+        assert_eq!(vec!["hello", "my", "name", "is", "alfred"], results);
+    }
+
+    #[test]
+    fn parse_separated_2() {
+        let input = Input::new("hello, my, name is john");
+        let (input, results) = input.parse_separated(|next| next.parse_alpha(), |next| next.parse_token(",")).unwrap();
+        assert_eq!("is john", input.remaining());
+        assert_eq!(vec!["hello", "my", "name"], results);
+    }
+
+    #[test]
+    fn parse_separated_error() {
+        let input = Input::new("hello, 1, name");
+        let err = input.parse_separated(|next| next.parse_alpha(), |next| next.parse_token(",")).unwrap_err();
+        assert_eq!(format!("{:?}", err), "expected alpha at offset 7");
+    }
+
+    #[test]
+    fn parse_delimited_1() {
+        let input = Input::new(r#" [ hello ] "#);
+        let (input, result) = input.parse_delimited(
+            |next| next.parse_token("["),
+            |next| next.parse_alpha(),
+            |next| next.parse_token("]")
+        ).unwrap();
+        assert_eq!("", input.remaining());
+        assert_eq!("hello", result);
+    }
+
+    #[test]
+    fn parse_delimited_error() {
+        let input = Input::new(r#" [ 1 ] "#);
+        let err = input.parse_delimited(
+            |next| next.parse_token("["),
+            |next| next.parse_alpha(),
+            |next| next.parse_token("]")
+        ).unwrap_err();
+        assert_eq!(format!("{:?}", err), "expected alpha at offset 3");
     }
 }
 
