@@ -1,99 +1,6 @@
 
 use std::fmt;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub struct InputPos(usize);
-
-#[derive(PartialEq, Eq)]
-pub enum ParseErr {
-    EndOfInput       (InputPos),
-    UnexpectedInput  (InputPos, char),
-    ExpectedSingle   (InputPos, String),
-    ExpectedMultiple (InputPos, Vec<String>),
-}
-
-impl ParseErr {
-    fn pos(&self) -> InputPos {
-        match self { 
-            ParseErr::EndOfInput(pos) => *pos,
-            ParseErr::UnexpectedInput(pos, _) => *pos,
-            ParseErr::ExpectedSingle(pos, _) => *pos,
-            ParseErr::ExpectedMultiple(pos, _) => *pos,
-        }
-    }
-}
-
-impl fmt::Debug for ParseErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParseErr::UnexpectedInput(pos, c) => {
-                write!(f, "unexpected character `{}` at offset {}", c, pos.0)?;
-            },
-            ParseErr::EndOfInput(_) => {
-                write!(f, "unexpected end of input")?;
-            }
-            ParseErr::ExpectedSingle(pos, exp) => {
-                write!(f, "expected {} at offset {}", exp, pos.0)?
-            },
-            ParseErr::ExpectedMultiple(pos, expected) => {
-                write!(f, "expected ")?;
-                for (i, exp) in expected.iter().enumerate() {
-                    if i == expected.len() - 1 {
-                        write!(f, " or ")?;
-                    }
-                    else if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", exp)?
-                }
-                write!(f, " at offset {}", pos.0)?;
-            },
-        };
-        Ok(())
-    }
-}
-
-impl ParseErr {
-    pub fn end_of_input(pos: InputPos) -> ParseErr {
-        ParseErr::EndOfInput(pos)
-    }
-    
-    pub fn unexpected_input(pos: InputPos, c: char) -> ParseErr {
-        ParseErr::UnexpectedInput(pos, c)
-    }
-    
-    pub fn expected_alpha(pos: InputPos) -> ParseErr {
-        ParseErr::ExpectedSingle(pos, format!("alpha"))
-    }
-
-    pub fn expected_number(pos: InputPos) -> ParseErr {
-        ParseErr::ExpectedSingle(pos, format!("number"))
-    }
-
-    pub fn expected_token(pos: InputPos, token: &str) -> ParseErr {
-        ParseErr::ExpectedSingle(pos, format!("`{}`", token))
-    }
-
-    pub fn expected_end_of_input(pos: InputPos) -> ParseErr {
-        ParseErr::ExpectedSingle(pos, format!("end of input"))
-    }
-
-    pub fn combine(a: ParseErr, b: ParseErr) -> ParseErr {
-        let pos = a.pos();
-        let mut errors = match a {
-            ParseErr::ExpectedSingle(_, a) => vec![a],
-            ParseErr::ExpectedMultiple(_, a) => a,
-            e => return e,
-        };
-        match b {
-            ParseErr::ExpectedSingle(_, b) => errors.push(b),
-            ParseErr::ExpectedMultiple(_, b) => errors.extend(b),
-            e => return e,
-        };
-        ParseErr::ExpectedMultiple(pos, errors)
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
     Symbol,
@@ -101,7 +8,7 @@ pub enum TokenKind {
     Numeric,
 }
 
-pub type ParseResult<'a, T> = Result<(Input<'a>, T), ParseErr>;
+pub type ParseResult<'a, T> = Result<(Input<'a>, T), ParseErr<'a>>;
 
 pub trait ParseResultEx<'a, T> {
     fn or_try(self, op: impl FnOnce() -> ParseResult<'a, T>) -> ParseResult<'a, T>;
@@ -136,6 +43,12 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
+pub struct InputSnapshot<'a> {
+    source: &'a str,
+    offset: usize,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Input<'a> {
     source: &'a str,
     offset: usize,
@@ -161,8 +74,8 @@ impl<'a> Input<'a> {
         self.source
     }
 
-    pub fn pos(&self) -> InputPos {
-        InputPos(self.offset)
+    pub fn snapshot(self) -> InputSnapshot<'a> {
+        InputSnapshot { source: self.source, offset: self.offset }
     }
 
     fn offset(&self, offset: usize) -> Self {
@@ -266,8 +179,8 @@ impl<'a> Input<'a> {
                 Ok((input.consume_ws(), (TokenKind::Symbol, token)))
             },
             // Error cases
-            Some(c) => Err(ParseErr::unexpected_input(self.pos(), c)),
-            None    => Err(ParseErr::end_of_input(self.pos())),
+            Some(c) => Err(ParseErr::unexpected_input(self.snapshot(), c)),
+            None    => Err(ParseErr::end_of_input(self.snapshot())),
         }
     }
 }
@@ -331,9 +244,9 @@ impl<'a> Input<'a> {
         let num = match token {
             (TokenKind::Numeric, num) => {
                 num.parse::<i32>()
-                    .map_err(|_| ParseErr::expected_number(self.pos()))
+                    .map_err(|_| ParseErr::expected_number(self.snapshot()))
             },
-            _ => Err(ParseErr::expected_number(self.pos())),
+            _ => Err(ParseErr::expected_number(self.snapshot())),
         }?;
         Ok((next, num))
     }
@@ -342,14 +255,14 @@ impl<'a> Input<'a> {
         let (next, token) = self.next_token()?;
         match token {
             (TokenKind::Alpha, alpha) => Ok((next, alpha)),
-            _ => Err(ParseErr::expected_alpha(self.pos())),
+            _ => Err(ParseErr::expected_alpha(self.snapshot())),
         }
     }
 
     pub fn parse_token(self, token: &str) -> ParseResult<'a, &'a str> {
         let (next, (_, actual)) = self.next_token()?;
         if actual != token {
-            return Err(ParseErr::expected_token(self.pos(), token));
+            return Err(ParseErr::expected_token(self.snapshot(), token));
         }
         Ok((next, actual))
     }
@@ -357,7 +270,7 @@ impl<'a> Input<'a> {
     pub fn parse_end(self) -> ParseResult<'a, ()> {
         match self.next_token() {
             Err(ParseErr::EndOfInput(_)) => Ok((self, ())),
-            _ => Err(ParseErr::expected_end_of_input(self.pos())),
+            _ => Err(ParseErr::expected_end_of_input(self.snapshot())),
         }
     }
 }
@@ -378,7 +291,7 @@ mod parse_tests {
     fn parse_i32_fail() {
         let input = Input::new("xxx");
         let err = input.parse_i32().unwrap_err();
-        assert_eq!(err, ParseErr::expected_number(InputPos(0)));
+        assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "xxx", offset: 0 }));
     }
 
     #[test]
@@ -393,7 +306,7 @@ mod parse_tests {
     fn parse_alpha_fail() {
         let input = Input::new("123");
         let err = input.parse_alpha().unwrap_err();
-        assert_eq!(err, ParseErr::expected_alpha(InputPos(0)));
+        assert_eq!(err, ParseErr::expected_alpha(InputSnapshot { source: "123", offset: 0 }));
     }
 
     #[test]
@@ -418,7 +331,7 @@ mod parse_tests {
     fn parse_token_fail() {
         let input = Input::new(" xxx ");
         let err = input.parse_token("yyy").unwrap_err();
-        assert_eq!(err, ParseErr::expected_token(InputPos(1), "yyy"));
+        assert_eq!(err, ParseErr::expected_token(InputSnapshot { source: " xxx ", offset: 1 }, "yyy"));
     }
 
     #[test]
@@ -434,7 +347,7 @@ mod parse_tests {
     fn parse_end_fail() {
         let input = Input::new("a");
         let err = input.parse_end().unwrap_err();
-        assert_eq!(err, ParseErr::expected_end_of_input(InputPos(0)));
+        assert_eq!(err, ParseErr::expected_end_of_input(InputSnapshot { source: "a", offset: 0 }));
     }
 
     #[test]
@@ -519,5 +432,199 @@ mod parse_tests {
         let (input, a) = parse_num(input).unwrap();
         assert_eq!(a, 0);
         assert_eq!(input.remaining(), "");
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum ParseErr<'a> {
+    EndOfInput       (InputSnapshot<'a>),
+    UnexpectedInput  (InputSnapshot<'a>, char),
+    ExpectedSingle   (InputSnapshot<'a>, String),
+    ExpectedMultiple (InputSnapshot<'a>, Vec<String>),
+}
+
+impl<'a> ParseErr<'a> {
+    fn snapshot(&self) -> &InputSnapshot<'a> {
+        match self { 
+            ParseErr::EndOfInput(snap) => &snap,
+            ParseErr::UnexpectedInput(snap, _) => &snap,
+            ParseErr::ExpectedSingle(snap, _) => &snap,
+            ParseErr::ExpectedMultiple(snap, _) => &snap,
+        }
+    }
+}
+
+impl<'a> ParseErr<'a> {
+    pub fn end_of_input(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
+        ParseErr::EndOfInput(snapshot)
+    }
+    
+    pub fn unexpected_input(snapshot: InputSnapshot<'a>, c: char) -> ParseErr<'a> {
+        ParseErr::UnexpectedInput(snapshot, c)
+    }
+    
+    pub fn expected_alpha(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
+        ParseErr::ExpectedSingle(snapshot, format!("alpha"))
+    }
+
+    pub fn expected_number(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
+        ParseErr::ExpectedSingle(snapshot, format!("number"))
+    }
+
+    pub fn expected_token(snapshot: InputSnapshot<'a>, token: &str) -> ParseErr<'a> {
+        ParseErr::ExpectedSingle(snapshot, format!("`{}`", token))
+    }
+
+    pub fn expected_end_of_input(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
+        ParseErr::ExpectedSingle(snapshot, format!("end of input"))
+    }
+
+    pub fn combine(a: ParseErr<'a>, b: ParseErr<'a>) -> ParseErr<'a> {
+        let snapshot = a.snapshot().clone();
+        let mut errors = match a {
+            ParseErr::ExpectedSingle(_, a) => vec![a],
+            ParseErr::ExpectedMultiple(_, a) => a,
+            e => return e,
+        };
+        match b {
+            ParseErr::ExpectedSingle(_, b) => errors.push(b),
+            ParseErr::ExpectedMultiple(_, b) => errors.extend(b),
+            e => return e,
+        };
+        ParseErr::ExpectedMultiple(snapshot, errors)
+    }
+}
+
+impl<'a> fmt::Debug for ParseErr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseErr::UnexpectedInput(snap, c) => {
+                write!(f, "unexpected character `{}` at offset {}", c, snap.offset)?;
+            },
+            ParseErr::EndOfInput(_) => {
+                write!(f, "unexpected end of input")?;
+            }
+            ParseErr::ExpectedSingle(snap, exp) => {
+                write!(f, "expected {} at offset {}", exp, snap.offset)?
+            },
+            ParseErr::ExpectedMultiple(snap, expected) => {
+                write!(f, "expected ")?;
+                for (i, exp) in expected.iter().enumerate() {
+                    if i == expected.len() - 1 {
+                        write!(f, " or ")?;
+                    }
+                    else if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", exp)?
+                }
+                write!(f, " at offset {}", snap.offset)?;
+            },
+        };
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for ParseErr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // "Display" version includes input text
+        writeln!(f, "{:?}", self)?;
+        writeln!(f, "{}", input_snippet(&self.snapshot(), 20))?;
+        write!(f, "{}", input_caret(&self.snapshot(), 20))?;
+        Ok(())
+    }
+}
+
+fn input_snippet(snap: &InputSnapshot, context: usize) -> String {
+    let snip_start = if snap.offset > context  { snap.offset - context } else { 0 };
+    let snip_end = (snap.offset + context).min(snap.source.len() - 1);
+    format!(
+        "{}{}{}",
+        if snip_start == 0 { "" } else { "…" },
+        &snap.source[snip_start..=snip_end],
+        if snip_end == snap.source.len() - 1 { "" } else { "…" }
+    )
+}
+
+fn input_caret(snap: &InputSnapshot, context: usize) -> String {
+    let leading = if snap.offset > context { context + 1 } else { snap.offset };
+    let mut s = " ".repeat(leading);
+    s.push_str("^--- here");
+    s
+}
+
+#[cfg(test)]
+mod err_fmt_tests {
+    use super::*;
+
+    #[test]
+    fn start_of_input() {
+        let context = 5;
+        let snap = InputSnapshot {
+            source: "Hello world, Goodbye moon.",
+            offset: 4,
+        };
+        assert_eq!("Hello worl…", input_snippet(&snap, context));
+        assert_eq!("    ^--- here", input_caret(&snap, context));
+    }
+
+    #[test]
+    fn middle_of_input() {
+        let context = 5;
+        let snap = InputSnapshot {
+            source: "Hello world, Goodbye moon.",
+            offset: 10,
+        };
+        assert_eq!("… world, Goo…", input_snippet(&snap, context));
+        assert_eq!("      ^--- here", input_caret(&snap, context));
+    }
+
+    #[test]
+    fn end_of_input() {
+        let context = 5;
+        let snap = InputSnapshot {
+            source: "Hello world, Goodbye moon.",
+            offset: 21,
+        };
+        assert_eq!("…dbye moon.", input_snippet(&snap, context));
+        assert_eq!("      ^--- here", input_caret(&snap, context));
+    }
+
+    fn example_parser<'a>(input: Input<'a>) -> ParseResult<'a, ()> {
+        let (input, _) = input.parse_token("Bar")?;
+        let (input, _) = input.parse_i32()?;
+        let (input, _) = input.parse_end()?;
+        Ok((input, ()))
+    }
+
+    #[test]
+    fn parser_error_debug_1() {
+        let input = Input::new("Bar Baz");
+        let err = example_parser(input).unwrap_err();
+        let actual = format!("{:?}", err);
+        let expected = r"expected number at offset 4";
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn parser_error_display_1() {
+        let input = Input::new("Foo 12");
+        let err = example_parser(input).unwrap_err();
+        let actual = format!("{}", err);
+        let expected = r"expected `Bar` at offset 0
+Foo 12
+^--- here";
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn parser_error_display_2() {
+        let input = Input::new("Bar Baz");
+        let err = example_parser(input).unwrap_err();
+        let actual = format!("{}", err);
+        let expected = r"expected number at offset 4
+Bar Baz
+    ^--- here";
+        assert_eq!(expected, actual);
     }
 }

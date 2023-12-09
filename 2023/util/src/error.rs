@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter, Error as FmtError};
-use std::error::{Error};
+use std::error::Error;
 
 pub struct AppErr(String, Option<Box<dyn Error>>);
 
@@ -73,6 +73,12 @@ use std;
 impl_from_error!(std::io::Error);
 impl_from_error!(std::num::ParseIntError);
 impl_from_debug!(::ConsumeIteratorError);
-impl_from_debug!(::parse::ParseErr);
+// impl_from_debug!(::parse::ParseErr);
 impl_from_debug!(&str);
 impl_from_debug!(String);
+
+impl<'a> From<::parse::ParseErr<'a>> for AppErr {
+    fn from(err: ::parse::ParseErr<'a>) -> Self {
+       AppErr::from_display("ParseErr", &err)
+    }
+}
