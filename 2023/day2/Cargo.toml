@@ -6,4 +6,3 @@ edition = "2021"
 
 [dependencies]
 util = { path = "../util" }
-winnow = "0.5.26"

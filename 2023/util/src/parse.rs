@@ -241,33 +241,29 @@ mod consume_tests {
 impl<'a> Input<'a> {
     /// Consume a single token from the input, returning (the remainder input, the token).
     /// A token is one of:
-    /// - . or , or + or -
     /// - a contiguous sequence of alpha characters
     /// - a contiguous sequence of numeric characters
+    /// - a single ascii punctuation character
     /// All whitespace is ignored.
     pub fn next_token(self) -> ParseResult<'a, (TokenKind, &'a str)> {
-        let symbols = ['.', ',', '+', '-'];
         let source = self.remaining();
         // Decide what to do based on the first input character
         match source.chars().next() {
-            // Symbol tokens
-            Some(c) if symbols.contains(&c) => {
-                let token = &source[..=0];
-                let input = self.offset(1);
-                Ok((input.consume_ws(), (TokenKind::Symbol, token)))
-            },
             // Alpha sequences
             Some(c) if c.is_alphabetic() => {
-                let lower = 'a'..='z';
-                let upper = 'A'..='Z';
-                let (input, token) = self.consume(|c| lower.contains(c) || upper.contains(c));
+                let (input, token) = self.consume(|c| c.is_alphabetic());
                 Ok((input.consume_ws(), (TokenKind::Alpha, token)))
             },
             // Numeric sequences
             Some(c) if c.is_numeric() => {
-                let numeric = '0'..='9';
-                let (input, token) = self.consume(|c| numeric.contains(c));
+                let (input, token) = self.consume(|c| c.is_numeric());
                 Ok((input.consume_ws(), (TokenKind::Numeric, token)))
+            },
+            // Symbol tokens
+            Some(c) if c.is_ascii_punctuation() => {
+                let token = &source[..=0];
+                let input = self.offset(1);
+                Ok((input.consume_ws(), (TokenKind::Symbol, token)))
             },
             // Error cases
             Some(c) => Err(ParseErr::unexpected_input(self.pos(), c)),
