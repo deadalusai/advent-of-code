@@ -18,7 +18,11 @@ struct GameRecord {
 }
 
 fn parse_game(input: Input) -> ParseResult<GameRecord> {
-    enum Term { EndScore, EndRound, EndRecord }
+    enum _Term { EndScore, EndRound, EndRecord }
+    use _Term::*;
+
+    enum _Color { Red, Green, Blue }
+    use _Color::*;
 
     // E.g.
     // Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
@@ -34,30 +38,31 @@ fn parse_game(input: Input) -> ParseResult<GameRecord> {
         // Parse scores
         loop {
             let next = input;
-            // {count} {label}
+            // {count} {color}
             let (next, score) = next.parse_i32()?;
-            let (next, label) = next.parse_alpha()?;
-            match label {
-                "red"   => round.red += score,
-                "green" => round.green += score,
-                "blue"  => round.blue += score,
-                _ => {}
+            let (next, color) = next.parse_token("red").val(Red)
+                .or_try(|| next.parse_token("green").val(Green))
+                .or_try(|| next.parse_token("blue").val(Blue))?;
+            match color {
+                Red   => round.red += score,
+                Green => round.green += score,
+                Blue  => round.blue += score,
             }
             // scan for end of score, end of round or end of input
-            let (next, term) = next.parse_token(",").map_val(|_| Term::EndScore)
-                .or_try(|| next.parse_token(";").map_val(|_| Term::EndRound))
-                .or_try(|| next.parse_end().map_val(|_| Term::EndRecord))?;
+            let (next, term) = next.parse_token(",").val(EndScore)
+                .or_try(|| next.parse_token(";").val(EndRound))
+                .or_try(|| next.parse_end().val(EndRecord))?;
             input = next;
             
             match term {
-                Term::EndScore => {
+                EndScore => {
                     continue;
                 },
-                Term::EndRound => {
+                EndRound => {
                     rounds.push(round);
                     break;
                 },
-                Term::EndRecord => {
+                EndRecord => {
                     rounds.push(round);
                     return Ok((input, GameRecord { id, rounds }))
                 },
