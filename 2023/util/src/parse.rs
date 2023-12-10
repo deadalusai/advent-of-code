@@ -1,6 +1,8 @@
 
 use std::fmt;
 
+use crate::error::AppErr;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
     Symbol,
@@ -20,6 +22,9 @@ pub trait ParseResultEx<'a, T> {
     /// Replaces the "value" component of a ParseResult.
     /// Useful for assigning a value to a token.
     fn val<V>(self, val: V) -> ParseResult<'a, V>;
+
+    /// Strips Input information from the ParseResult, converting it into an ordinary Result.
+    fn complete(self) -> Result<T, AppErr>;
 }
 
 impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
@@ -45,6 +50,11 @@ impl<'a, T> ParseResultEx<'a, T> for ParseResult<'a, T> {
             Ok((input, _)) => Ok((input, val)),
             Err(e) => Err(e),
         }
+    }
+
+    fn complete(self) -> Result<T, AppErr> {
+        self.map(|(_, v)| v)
+            .map_err(|e| e.into())
     }
 }
 
