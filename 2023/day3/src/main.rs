@@ -9,31 +9,40 @@ use util::error::AppErr;
 struct Pos { y: usize, x: usize }
 
 impl Pos {
-    fn surrounding(&self) -> impl Iterator<Item=Pos> {
-        let pos = self.clone();
-        let offsets = [-1, 0, 1].into_iter().flat_map(|x| [-1, 0, 1].into_iter().map(move |y| (x, y)));
-        offsets.filter_map(move |(x, y)| {
-            match (x, y) {
-                (0,  0)  => None,
-                (ox, _)  if ox < 0 && pos.x == 0 => None,
-                (_,  oy) if oy < 0 && pos.y == 0 => None,
-                (ox, oy) => Some(Pos {
-                    x: (pos.x as isize + ox) as usize,
-                    y: (pos.y as isize + oy) as usize,
-                })
-            }
-        })
+    fn up(&self) -> Option<Pos> {
+        match self.y {
+            0 => None,
+            y => Some(Pos { x: self.x, y: y - 1 }),
+        }
+    }
+
+    fn down(&self) -> Pos {
+        Pos { x: self.x, y: self.y + 1 }
     }
 
     fn left(&self) -> Option<Pos> {
         match self.x {
-            0 => { None },
+            0 => None,
             x => Some(Pos { x: x - 1, y: self.y }),
         }
     }
 
     fn right(self) -> Pos {
         Pos { x: self.x + 1, y: self.y }
+    }
+
+    fn surrounding(&self) -> impl Iterator<Item=Pos> {
+        let candidates = [
+            self.up().and_then(|p| p.left()),
+            self.up(),
+            self.up().map(|p| p.right()),
+            self.left(),
+            Some(self.right()),
+            self.down().left(),
+            Some(self.down()),
+            Some(self.down().right()),
+        ];
+        candidates.into_iter().flatten()
     }
 }
 
@@ -67,9 +76,10 @@ fn main() -> Result<(), AppErr> {
             .and_then(|c| c.to_digit(10))
     }
 
-    fn surrounding_part_numbers<'a> (pos: Pos, grid: &'a Grid) -> impl Iterator<Item=(Pos, u32)> + 'a {
+    fn surrounding_part_numbers<'a>(pos: Pos, grid: &'a Grid) -> impl Iterator<Item=u32> + 'a {
+        let mut seen = HashSet::with_capacity(8);
         pos.surrounding()
-            .filter_map(|p| {
+            .filter_map(move |p| {
                 // Is this part of a number?
                 if digit_at(grid, p).is_none() {
                     return None;
@@ -79,6 +89,10 @@ fn main() -> Result<(), AppErr> {
                 while let Some(n) = p1.left().filter(|&n| digit_at(grid, n).is_some()) {
                     p1 = n
                 }
+                // Have we seen this number?
+                if !seen.insert(p1) {
+                    return None;
+                }
                 // Parse it
                 let mut num = 0;
                 let mut p2 = p1;
@@ -87,11 +101,10 @@ fn main() -> Result<(), AppErr> {
                     num += d;
                     p2 = p2.right();
                 }
-                Some((p1, num))
+                Some(num)
             })
     }
 
-    let mut seen = HashSet::new();
     let mut sum = 0_u32;
 
     for (y, row) in grid.iter().enumerate() {
@@ -99,16 +112,38 @@ fn main() -> Result<(), AppErr> {
             if c != '.' && !c.is_numeric() {
                 // Found a symbol.
                 // Sum up any surrounding part numbers
-                let pos = Pos { x, y };
-                sum += surrounding_part_numbers(pos, &grid)
-                    // Don't double-count
-                    .filter_map(|(pos, n)| if seen.insert(pos) { Some(n) } else { None })
-                    .sum::<u32>();
+                sum += surrounding_part_numbers(Pos { x, y }, &grid).sum::<u32>();
             }
         }
     }
 
     println!("Part 1: {}", sum);
+
+    /*
+        --- Part 2 ---
+        A gear is any * symbol that is adjacent to exactly two part numbers.
+        Its gear ratio is the result of multiplying those two numbers together.
+
+        What is the sum of all of the gear ratios in your engine schematic?
+    */
+
+    let mut sum = 0_u32;
+
+    for (y, row) in grid.iter().enumerate() {
+        for (x, &c) in row.iter().enumerate() {
+            if c == '*' {
+                // Found a gear
+                let mut surr = surrounding_part_numbers(Pos { x, y }, &grid);
+                match (surr.next(), surr.next(), surr.next()) {
+                    // Sum up gears with exactly two part numbers only
+                    (Some(a), Some(b), None) => sum += a * b,
+                    _ => continue,
+                }
+            }
+        }
+    }
+
+    println!("Part 2: {}", sum);
 
     Ok(())
 }
