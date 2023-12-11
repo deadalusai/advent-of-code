@@ -452,6 +452,7 @@ mod parse_tests {
 }
 
 impl<'a> Input<'a> {
+    /// Repeatedly applies the parser `item` and then the parser `seperator` until `seperator` fails.
     pub fn parse_separated<I, Fi, S, Fs>(self, item: Fi, separator: Fs) -> ParseResult<'a, Vec<I>>
     where
         Fi: Fn(Input<'a>) -> ParseResult<'a, I>,
@@ -479,6 +480,8 @@ impl<'a> Input<'a> {
         Ok((input, results))
     }
 
+    /// Applies parse `start`, then `item`, then `end`.
+    /// If successful, returns the value returned by `item`.
     pub fn parse_delimited<Ds, Fds, I, Fi, De, Fde>(self, start: Fds, item: Fi, end: Fde) -> ParseResult<'a, I>
     where
         Fds: Fn(Input<'a>) -> ParseResult<'a, Ds>,
@@ -489,6 +492,33 @@ impl<'a> Input<'a> {
         let (input, item) = item(input)?;
         let (input, _) = end(input)?;
         Ok((input, item))
+    }
+
+    /// Repeatedly applies the parser `item` until it fails.
+    /// Must parse at least once.
+    pub fn parse_repeated<I, Fi>(self, item: Fi) -> ParseResult<'a, Vec<I>>
+    where
+        Fi: Fn(Input<'a>) -> ParseResult<'a, I>
+    {
+        let mut input = self.clone();
+        let mut results = Vec::new();
+
+        loop {
+            match item(input) {
+                Ok((next, val)) => {
+                    input = next;
+                    results.push(val);
+                },
+                Err(_) if results.len() > 0 => {
+                    break;
+                },
+                Err(err) => {
+                    return Err(err);
+                },
+            }
+        }
+
+        Ok((input, results))
     }
 }
 
@@ -540,6 +570,22 @@ mod combinator_tests {
             |next| next.parse_token("]")
         ).unwrap_err();
         assert_eq!(format!("{:?}", err), "expected alpha at offset 3");
+    }
+
+    #[test]
+    fn parse_repeated_1() {
+        let input = Input::new(r"1 2 3 4 5 end");
+        let (input, values) = input.parse_repeated(|next| next.parse_i32()).unwrap();
+        assert_eq!("end", input.remaining());
+        assert_eq!(vec![1, 2, 3, 4, 5], values);
+    }
+
+    #[test]
+    fn parse_repeated_error() {
+        let input = Input::new(r"end");
+        let err = input.parse_repeated(|next| next.parse_i32()).unwrap_err();
+        assert_eq!("end", err.snapshot().source);
+        assert_eq!(format!("{:?}", err), "expected number at offset 0");
     }
 }
 

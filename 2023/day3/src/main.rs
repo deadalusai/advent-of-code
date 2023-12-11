@@ -78,31 +78,30 @@ fn main() -> Result<(), AppErr> {
 
     fn surrounding_part_numbers<'a>(pos: Pos, grid: &'a Grid) -> impl Iterator<Item=u32> + 'a {
         let mut seen = HashSet::with_capacity(8);
-        pos.surrounding()
-            .filter_map(move |p| {
-                // Is this part of a number?
-                if digit_at(grid, p).is_none() {
-                    return None;
-                }
-                // Find the start of the number
-                let mut p1 = p;
-                while let Some(n) = p1.left().filter(|&n| digit_at(grid, n).is_some()) {
-                    p1 = n
-                }
-                // Have we seen this number?
-                if !seen.insert(p1) {
-                    return None;
-                }
-                // Parse it
-                let mut num = 0;
-                let mut p2 = p1;
-                while let Some(d) = digit_at(grid, p2) {
-                    num *= 10;
-                    num += d;
-                    p2 = p2.right();
-                }
-                Some(num)
-            })
+        pos.surrounding().filter_map(move |p| {
+            // Is this part of a number?
+            if digit_at(grid, p).is_none() {
+                return None;
+            }
+            // Find the start of the number
+            let mut p1 = p;
+            while let Some(n) = p1.left().filter(|&n| digit_at(grid, n).is_some()) {
+                p1 = n
+            }
+            // Have we seen this number?
+            if !seen.insert(p1) {
+                return None;
+            }
+            // Parse it
+            let mut num = 0;
+            let mut p2 = p1;
+            while let Some(d) = digit_at(grid, p2) {
+                num *= 10;
+                num += d;
+                p2 = p2.right();
+            }
+            Some(num)
+        })
     }
 
     let mut sum = 0_u32;
