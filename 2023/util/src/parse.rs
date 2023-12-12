@@ -8,6 +8,7 @@ pub enum TokenKind {
     Symbol,
     Alpha,
     Numeric,
+    Newline,
 }
 
 pub type ParseResult<'a, T> = Result<(Input<'a>, T), ParseErr<'a>>;
@@ -112,7 +113,7 @@ impl<'a> Input<'a> {
     }
     
     fn consume_ws(self) -> Self {
-        self.consume(|c| c.is_whitespace()).0
+        self.consume(|c| c.is_whitespace() && *c != '\n').0
     }
 }
 
@@ -173,6 +174,7 @@ impl<'a> Input<'a> {
     /// - a contiguous sequence of alpha characters
     /// - a contiguous sequence of numeric characters
     /// - a single ascii punctuation character
+    /// - a contiguous sequence of newline characters
     /// All whitespace is ignored.
     pub fn next_token(self) -> ParseResult<'a, (TokenKind, &'a str)> {
         let source = self.remaining();
@@ -194,6 +196,11 @@ impl<'a> Input<'a> {
                 let input = self.offset(1);
                 Ok((input.consume_ws(), (TokenKind::Symbol, token)))
             },
+            // Newline tokens
+            Some(c) if c == '\r' || c == '\n' => {
+                let (input, token) = self.consume(|c| *c == '\r' || *c == '\n');
+                Ok((input.consume_ws(), (TokenKind::Newline, token)))
+            }
             // Error cases
             Some(c) => Err(ParseErr::unexpected_input(self.snapshot(), c)),
             None    => Err(ParseErr::end_of_input(self.snapshot())),
@@ -281,6 +288,14 @@ impl<'a> Input<'a> {
             return Err(ParseErr::expected_token(self.snapshot(), token));
         }
         Ok((next, actual))
+    }
+
+    pub fn parse_newline(self) -> ParseResult<'a, ()> {
+        let (next, token) = self.next_token()?;
+        match token {
+            (TokenKind::Newline, _) => Ok((next, ())),
+            _ => Err(ParseErr::expected_newline(self.snapshot()))
+        }
     }
 
     pub fn parse_end(self) -> ParseResult<'a, ()> {
@@ -520,6 +535,20 @@ impl<'a> Input<'a> {
 
         Ok((input, results))
     }
+
+    /// Parses each of the tokens in the input sequence in order.
+    pub fn parse_token_sequence<'b>(self, tokens: impl IntoIterator<Item=&'b str>) -> ParseResult<'a, ()> {
+        let mut input = self.clone();
+        let mut tokens = tokens.into_iter();
+        while let Some(token) = tokens.next() {
+            let (next, (_, actual)) = input.next_token()?;
+            if actual != token {
+                return Err(ParseErr::expected_token(input.snapshot(), token));
+            }
+            input = next;
+        }
+        Ok((input, ()))
+    }
 }
 
 #[cfg(test)]
@@ -587,6 +616,21 @@ mod combinator_tests {
         assert_eq!("end", err.snapshot().source);
         assert_eq!(format!("{:?}", err), "expected number at offset 0");
     }
+
+    #[test]
+    fn parse_token_sequence_1() {
+        let input = Input::new(r"a b c d e");
+        let (input, ()) = input.parse_token_sequence(["a", "b", "c", "d"]).unwrap();
+        assert_eq!("e", input.remaining());
+    }
+
+    #[test]
+    fn parse_token_sequence_error() {
+        let input = Input::new(r"a b c d e");
+        let err = input.parse_token_sequence(["a", "b", "c", "w"]).unwrap_err();
+        assert_eq!("a b c d e", err.snapshot().source);
+        assert_eq!(format!("{:?}", err), "expected `w` at offset 6");
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -631,6 +675,10 @@ impl<'a> ParseErr<'a> {
 
     pub fn expected_end_of_input(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
         ParseErr::ExpectedSingle(snapshot, format!("end of input"))
+    }
+
+    pub fn expected_newline(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
+        ParseErr::ExpectedSingle(snapshot, format!("newline"))
     }
 
     pub fn combine(a: ParseErr<'a>, b: ParseErr<'a>) -> ParseErr<'a> {
