@@ -263,10 +263,14 @@ mod lexer_tests {
 
 impl<'a> Input<'a> {
     pub fn parse_i32(self) -> ParseResult<'a, i32> {
+        self.parse_i64().map_val(|n| n as i32)
+    }
+
+    pub fn parse_i64(self) -> ParseResult<'a, i64> {
         let (next, token) = self.next_token()?;
         let num = match token {
             (TokenKind::Numeric, num) => {
-                num.parse::<i32>()
+                num.parse::<i64>()
                     .map_err(|_| ParseErr::expected_number(self.snapshot()))
             },
             _ => Err(ParseErr::expected_number(self.snapshot())),
@@ -322,6 +326,21 @@ mod parse_tests {
     fn parse_i32_fail() {
         let input = Input::new("xxx");
         let err = input.parse_i32().unwrap_err();
+        assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "xxx", offset: 0 }));
+    }
+
+    #[test]
+    fn parse_i64_success() {
+        let input = Input::new("1655973293");
+        let (input, a) = input.parse_i64().unwrap();
+        assert_eq!(a, 1655973293_i64);
+        assert_eq!(input.remaining(), "");
+    }
+
+    #[test]
+    fn parse_i64_fail() {
+        let input = Input::new("xxx");
+        let err = input.parse_i64().unwrap_err();
         assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "xxx", offset: 0 }));
     }
 
