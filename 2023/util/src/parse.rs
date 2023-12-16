@@ -1,5 +1,6 @@
 
 use std::fmt;
+use std::any::type_name;
 
 use crate::error::AppErr;
 
@@ -262,20 +263,30 @@ mod lexer_tests {
 }
 
 impl<'a> Input<'a> {
-    pub fn parse_i32(self) -> ParseResult<'a, i32> {
-        self.parse_i64().map_val(|n| n as i32)
-    }
-
-    pub fn parse_i64(self) -> ParseResult<'a, i64> {
+    pub fn parse_numeric(self) -> ParseResult<'a, &'a str> {
         let (next, token) = self.next_token()?;
         let num = match token {
-            (TokenKind::Numeric, num) => {
-                num.parse::<i64>()
-                    .map_err(|_| ParseErr::expected_number(self.snapshot()))
-            },
+            (TokenKind::Numeric, num) => Ok(num),
             _ => Err(ParseErr::expected_number(self.snapshot())),
         }?;
         Ok((next, num))
+    }
+
+    fn parse_numeric_as<T: std::str::FromStr>(self) -> ParseResult<'a, T> {
+        match self.parse_numeric() {
+            Ok((next, token)) => token
+                .parse::<T>().map(|v| (next, v))
+                .map_err(|_| ParseErr::invalid_input(self.snapshot(), format!("unable to parse as {}", type_name::<T>()))),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn parse_i32(self) -> ParseResult<'a, i32> {
+        self.parse_numeric_as::<i32>()
+    }
+
+    pub fn parse_i64(self) -> ParseResult<'a, i64> {
+        self.parse_numeric_as::<i64>()
     }
 
     pub fn parse_alpha(self) -> ParseResult<'a, &'a str> {
@@ -315,6 +326,21 @@ mod parse_tests {
     use super::*;
 
     #[test]
+    fn parse_numeric_success() {
+        let input = Input::new("1234566772234524");
+        let (input, a) = input.parse_numeric().unwrap();
+        assert_eq!(a, "1234566772234524");
+        assert_eq!(input.remaining(), "");
+    }
+
+    #[test]
+    fn parse_numeric_fail() {
+        let input = Input::new("not a number");
+        let err = input.parse_numeric().unwrap_err();
+        assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "not a number", offset: 0 }));
+    }
+
+    #[test]
     fn parse_i32_success() {
         let input = Input::new("123");
         let (input, a) = input.parse_i32().unwrap();
@@ -324,9 +350,9 @@ mod parse_tests {
 
     #[test]
     fn parse_i32_fail() {
-        let input = Input::new("xxx");
+        let input = Input::new("999999999999999999");
         let err = input.parse_i32().unwrap_err();
-        assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "xxx", offset: 0 }));
+        assert_eq!(err, ParseErr::invalid_input(input.snapshot(), "unable to parse as i32"));
     }
 
     #[test]
@@ -339,9 +365,9 @@ mod parse_tests {
 
     #[test]
     fn parse_i64_fail() {
-        let input = Input::new("xxx");
+        let input = Input::new("999999999999999999999999999999999999");
         let err = input.parse_i64().unwrap_err();
-        assert_eq!(err, ParseErr::expected_number(InputSnapshot { source: "xxx", offset: 0 }));
+        assert_eq!(err, ParseErr::invalid_input(input.snapshot(), "unable to parse as i64"));
     }
 
     #[test]
@@ -655,6 +681,7 @@ mod combinator_tests {
 #[derive(PartialEq, Eq)]
 pub enum ParseErr<'a> {
     EndOfInput       (InputSnapshot<'a>),
+    InvalidInput     (InputSnapshot<'a>, String),
     UnexpectedInput  (InputSnapshot<'a>, char),
     ExpectedSingle   (InputSnapshot<'a>, String),
     ExpectedMultiple (InputSnapshot<'a>, Vec<String>),
@@ -664,6 +691,7 @@ impl<'a> ParseErr<'a> {
     fn snapshot(&self) -> &InputSnapshot<'a> {
         match self { 
             ParseErr::EndOfInput(snap) => &snap,
+            ParseErr::InvalidInput(snap, _) => &snap,
             ParseErr::UnexpectedInput(snap, _) => &snap,
             ParseErr::ExpectedSingle(snap, _) => &snap,
             ParseErr::ExpectedMultiple(snap, _) => &snap,
@@ -678,6 +706,10 @@ impl<'a> ParseErr<'a> {
     
     pub fn unexpected_input(snapshot: InputSnapshot<'a>, c: char) -> ParseErr<'a> {
         ParseErr::UnexpectedInput(snapshot, c)
+    }
+    
+    pub fn invalid_input(snapshot: InputSnapshot<'a>, message: impl Into<String>) -> ParseErr<'a> {
+        ParseErr::InvalidInput(snapshot, message.into())
     }
     
     pub fn expected_alpha(snapshot: InputSnapshot<'a>) -> ParseErr<'a> {
@@ -719,6 +751,9 @@ impl<'a> ParseErr<'a> {
 impl<'a> fmt::Debug for ParseErr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ParseErr::InvalidInput(snap, message) => {
+                write!(f, "invalid input ({}) at offset {}", message, snap.offset)?;
+            }
             ParseErr::UnexpectedInput(snap, c) => {
                 write!(f, "unexpected character `{}` at offset {}", c, snap.offset)?;
             },
